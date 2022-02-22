@@ -1,0 +1,100 @@
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.afs";
+option java_outer_classname = "AFSProto";
+option objc_class_prefix = "AFS";
+
+package afs;
+
+service AFS {
+  rpc GetAttr (GetAttrRequest) returns (GetAttrReply) {}
+  rpc Read (ReadRequest) returns (ReadReply) {}
+  rpc Write (WriteRequest) returns (WriteReply) {}
+  rpc MakeFile (MakeFileRequest) returns (MakeFileReply) {}
+  rpc MakeDir (MakeDirRequest) returns (MakeDirReply) {}
+  rpc DeleteFile (DeleteFileRequest) returns (DeleteFileReply) {}
+  rpc DeleteDir (DeleteDirRequest) returns (DeleteDirReply) {}
+}
+// TODO: LOW: Allow write only when client has called open previously?
+
+// The request message containing the user's name.
+message GetAttrRequest {
+  string path = 1;
+}
+
+message ReadRequest {
+    string path = 1;
+}
+
+message WriteRequest {
+    string path = 1;
+    string data = 2;
+}
+
+message MakeFileRequest {
+    string path = 1;
+}
+
+message MakeDirRequest {
+    string path = 1;
+}
+
+message DeleteFileRequest {
+    string path = 1;
+}
+
+message DeleteDirRequest {
+    string path = 1;
+}
+
+
+// The response messages
+message GetAttrReply {
+  uint32 error = 1;
+  uint64 size = 2;
+  uint32 lastModTime = 3;
+}
+
+message ReadReply {
+    uint32 error = 1;
+    string data = 2;
+    uint32 lastModTime = 3;
+}
+
+message WriteReply {
+    uint32 error = 1;
+    uint32 lastModTime = 2;
+}
+
+message MakeFileReply {
+    uint32 error = 1;
+    uint32 lastModTime = 2;
+}
+
+message MakeDirReply {
+    uint32 error = 1;
+    uint32 lastModTime = 2;
+}
+
+message DeleteFileReply {
+    uint32 error = 1;
+}
+
+message DeleteDirReply {
+    uint32 error = 1;
+}
