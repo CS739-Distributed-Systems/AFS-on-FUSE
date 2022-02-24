@@ -32,7 +32,7 @@
 *.app
 
 # build files
-src/cmake*
+src/cmake/*
 
 #editor
 .vscode
