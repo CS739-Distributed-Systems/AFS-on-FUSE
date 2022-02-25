@@ -38,11 +38,22 @@ class AFSClient {
     return;
   }
 
+  void GetAttr(string path){
+    ClientContext context;
+    DeleteFileRequest request;
+    DeleteFileReply reply;
+
+    request.set_path(path);
+    
+    Status status = stub_->DeleteFile(&context, request, &reply);
+
+  }
+
  private:
   std::unique_ptr<AFS::Stub> stub_;
 };
 
-int main(int argc, char** argv) {
+int main1(int argc, char** argv) {
   std::string target_str;
   std::string arg_str("--target");
   if (argc > 1) {
@@ -72,4 +83,9 @@ int main(int argc, char** argv) {
   afsClient.DeleteFile(fileName);
 
   return 0;
+}
+
+int test() {
+  printf("hello bullshit!\n");
+  return 40;
 }

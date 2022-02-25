@@ -20,6 +20,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(HelloWorld C CXX)
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" ${CMAKE_MODULE_PATH})
 
 include(common.cmake)
 
@@ -56,9 +57,16 @@ target_link_libraries(afs_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-# Targets greeter_[async_](client|server)
+# afs_grpc_proto
+add_library(afs_client_lib
+  "afs_client.cc"
+)
+target_link_libraries(afs_client_lib
+  afs_grpc_proto
+)
+
 foreach(_target
-  afs_client afs_server)
+  afs_server)
   add_executable(${_target} "${_target}.cc")
   target_link_libraries(${_target}
     afs_grpc_proto
@@ -66,3 +74,19 @@ foreach(_target
     ${_GRPC_GRPCPP}
     ${_PROTOBUF_LIBPROTOBUF})
 endforeach()
+
+find_package(FUSE REQUIRED)
+
+include_directories(${FUSE_INCLUDE_DIR})
+
+foreach(_target
+    fuse-client)
+    add_executable(${_target} "${_target}.cc")
+    target_link_libraries(${_target}
+    afs_client_lib
+    ${FUSE_LIBRARIES}
+    )
+endforeach()
+
+# add_executable(fuse-client fuse-client.cpp)
+# target_link_libraries(fuse-client ${FUSE_LIBRARIES})
