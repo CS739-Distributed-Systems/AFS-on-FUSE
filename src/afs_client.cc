@@ -38,7 +38,7 @@ class AFSClient {
     return;
   }
 
-  void GetAttr(string path){
+  int GetAttr(string path){
     ClientContext context;
     DeleteFileRequest request;
     DeleteFileReply reply;
@@ -46,7 +46,17 @@ class AFSClient {
     request.set_path(path);
     
     Status status = stub_->DeleteFile(&context, request, &reply);
+    return 0;
+  }
 
+  int MakeDir(string path, mode_t mode){
+    ClientContext context;
+    MakeDirRequest request;
+    MakeDirReply reply;
+
+    request.set_path(path);
+    request.set_mode(mode);
+    Status status = stub_->MakeDir(&context, request, &reply);
   }
 
  private:

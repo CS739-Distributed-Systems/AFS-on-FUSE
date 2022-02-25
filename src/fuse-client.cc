@@ -35,6 +35,8 @@ static int fill_dir_plus = 0;
 static int count_readdir = 0;
 static int count_getattr = 0;
 
+static AFSClient *afsClient;
+
 static void *xmp_init(struct fuse_conn_info *conn,
 		      struct fuse_config *cfg)
 {
@@ -102,12 +104,17 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	return 0;
 }
 
+static int xmp_mkdir(const char *path, mode_t mode) {
+    printf("akshay mkdir %s\n",path);
+    return afsClient->MakeDir(path, mode);
+}
 
 static struct client_ops: fuse_operations {
 	client_ops() {
 		init = xmp_init;
 		getattr	= xmp_getattr;
 		readdir = xmp_readdir;
+		mkdir	= xmp_mkdir;
 	}
 } xmp_oper;
 
@@ -118,6 +125,11 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
+	string target_str = "localhost:50051";
+
+        struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+
+        afsClient = new AFSClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
 	umask(0);
 			/* Process the "--plus" option apart */
 	for (i=0, new_argc=0; (i<argc) && (new_argc<MAX_ARGS); i++) {

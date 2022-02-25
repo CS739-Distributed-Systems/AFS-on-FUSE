@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <sys/stat.h>
 
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
@@ -14,8 +15,11 @@ using grpc::Status;
 using namespace afs;
 using namespace std;
 
+
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
+
+  const char *serverPath = "/users/akshay95/server_space";
 
   Status DeleteFile(ServerContext* context, const DeleteFileRequest* request,
                   DeleteFileReply* reply) override {
@@ -23,6 +27,21 @@ class AFSServiceImpl final : public AFS::Service {
 
     reply->set_error(0);
 
+    return Status::OK;
+  }
+
+  Status MakeDir(ServerContext* context, const MakeDirRequest* request,
+                  MakeDirReply* reply) override {
+
+    int res = mkdir((serverPath + request->path()).c_str(), request->mode());
+    if (res == -1) {
+      printf("Error in mkdir ErrorNo: %d\n",errno);
+      perror(strerror(errno));
+      reply->set_error(errno);
+    } else {
+      printf("MakeDirectory success\n");
+      reply->set_error(0);
+     }
     return Status::OK;
   }
 

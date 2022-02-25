@@ -52,6 +52,7 @@ message MakeFileRequest {
 
 message MakeDirRequest {
     string path = 1;
+    int32 mode = 2;
 }
 
 message DeleteFileRequest {
