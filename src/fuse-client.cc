@@ -65,7 +65,7 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
     printf("entered:xmp_getattr: %d\n", count_getattr);
 	(void) fi;
 	int res;
-	printf("%d returned",test());
+	res = afsClient->GetAttr(path, stbuf);
 	res = lstat(path, stbuf);
 	if (res == -1)
 		return -errno;
@@ -127,9 +127,9 @@ int main(int argc, char *argv[])
 
 	string target_str = "localhost:50051";
 
-        struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-        afsClient = new AFSClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+    afsClient = new AFSClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
 	umask(0);
 			/* Process the "--plus" option apart */
 	for (i=0, new_argc=0; (i<argc) && (new_argc<MAX_ARGS); i++) {
