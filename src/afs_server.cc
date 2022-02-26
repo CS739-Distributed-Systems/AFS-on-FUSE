@@ -15,11 +15,10 @@ using grpc::Status;
 using namespace afs;
 using namespace std;
 
-
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/users/akshay95/server_space";
+  const char *serverPath = "/home/hemalkumar/hemal/server";
 
   Status DeleteFile(ServerContext* context, const DeleteFileRequest* request,
                   DeleteFileReply* reply) override {
@@ -40,6 +39,21 @@ class AFSServiceImpl final : public AFS::Service {
       reply->set_error(errno);
     } else {
       printf("MakeDirectory success\n");
+      reply->set_error(0);
+     }
+    return Status::OK;
+  }
+
+  Status DeleteDir(ServerContext* context, const DeleteDirRequest* request,
+                  DeleteDirReply* reply) override {
+
+    int res = rmdir((serverPath + request->path()).c_str());
+    if (res == -1) {
+      cout << "Error in DeleteDir ErrorNo: " << errno << endl;
+      perror(strerror(errno));
+      reply->set_error(errno);
+    } else {
+      cout << "DeleteDir success" << endl;
       reply->set_error(0);
      }
     return Status::OK;

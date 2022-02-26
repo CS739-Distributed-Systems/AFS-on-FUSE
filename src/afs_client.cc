@@ -59,6 +59,17 @@ class AFSClient {
     Status status = stub_->MakeDir(&context, request, &reply);
   }
 
+  int DeleteDir(string path){
+    ClientContext context;
+    DeleteDirRequest request;
+    DeleteDirReply reply;
+
+    request.set_path(path);
+    Status status = stub_->DeleteDir(&context, request, &reply);
+
+    return -reply.error();
+  }
+
  private:
   std::unique_ptr<AFS::Stub> stub_;
 };

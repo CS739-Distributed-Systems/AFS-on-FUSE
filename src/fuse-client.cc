@@ -106,7 +106,22 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int xmp_mkdir(const char *path, mode_t mode) {
     printf("akshay mkdir %s\n",path);
+	// TODO: create local dir as well?
     return afsClient->MakeDir(path, mode);
+}
+
+static int xmp_rmdir(const char *path)
+{
+	int res;
+
+	// TODO: remmve local dir as well?
+	// res = rmdir(path);
+	res = afsClient->DeleteDir(path);
+
+	if (res == -1)
+		return -errno;
+
+	return 0;
 }
 
 static struct client_ops: fuse_operations {
@@ -115,6 +130,7 @@ static struct client_ops: fuse_operations {
 		getattr	= xmp_getattr;
 		readdir = xmp_readdir;
 		mkdir	= xmp_mkdir;
+		rmdir 	= xmp_rmdir;
 	}
 } xmp_oper;
 
