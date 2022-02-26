@@ -5,6 +5,9 @@
 #include <time.h>
 #include <limits>
 #include <chrono>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <grpcpp/grpcpp.h>
 #include "afs.grpc.pb.h"
@@ -38,16 +41,40 @@ class AFSClient {
     return;
   }
 
-  int GetAttr(string path){
+  int GetAttr(string path, struct stat* output){
+    printf("Reached afs_client GetAttr\n");
+    GetAttrReply reply;
     ClientContext context;
-    DeleteFileRequest request;
-    DeleteFileReply reply;
-
+    GetAttrRequest request;
     request.set_path(path);
-    
-    Status status = stub_->DeleteFile(&context, request, &reply);
+
+    memset(output, 0, sizeof(struct stat));
+
+    Status status = stub_->GetAttr(&context, request , &reply);
+
+    if(reply.error() != 0){
+      return -reply.error();
+    }
+
+    output->st_ino = reply.inode();
+    output->st_mode = reply.mode();
+    // output->st_nlink = result.nlink();
+    // output->st_uid = reply.uid();
+    // output->st_gid = result.gid();
+    // output->st_size = result.size();
+    output->st_blksize = reply.block_size();
+    output->st_blocks = reply.blocks();
+    // output->st_atime = reply.
+    output->st_mtime = reply.last_mod_time();
+    // output->st_ctime = reply.st_ctim();
+    cout<<output->st_mtime<<endl;
+    cout<<reply.last_mod_time()<<endl;
+    cout<<reply.last_acess_time()<<endl; // understand
+    cout<<reply.last_stat_change_time()<<endl;
+    printf("done\n");
     return 0;
   }
+
 
   int MakeDir(string path, mode_t mode){
     ClientContext context;

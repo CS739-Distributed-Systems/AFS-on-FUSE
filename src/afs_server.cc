@@ -59,6 +59,36 @@ class AFSServiceImpl final : public AFS::Service {
     return Status::OK;
   }
 
+  Status GetAttr(ServerContext *context, const GetAttrRequest *request,
+                 GetAttrReply *reply) override
+  {
+    printf("Reached server getAttr\n");
+    int res;
+    struct stat st;
+    std::string path = "/home/hemalkumar/server" + request->path(); // TODO: check path or add prefix if needed
+    printf("GetAttr: %s \n", path.c_str());
+
+    res = lstat(path.c_str(), &st);
+    if (res < 0)
+    {
+      perror(strerror(errno));
+      reply->set_error(errno);
+      return Status::CANCELLED; // TODO: find apt error 
+    }
+    reply->set_inode(st.st_ino);
+    reply->set_mode(st.st_mode);
+    reply->set_num_hlinks(st.st_nlink);
+    reply->set_user_id(st.st_uid);
+    reply->set_groud_id(st.st_gid);
+    reply->set_size(st.st_size);
+    reply->set_block_size(st.st_blksize);
+    reply->set_blocks(st.st_blocks);
+    reply->set_last_acess_time(st.st_atime);
+    reply->set_last_mod_time(st.st_mtime);
+    reply->set_last_stat_change_time(st.st_ctime);
+    reply->set_error(0);
+    return Status::OK;
+  }
 };
 
 void RunServer() {
