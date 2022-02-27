@@ -34,24 +34,6 @@ class AFSClient {
   AFSClient(std::shared_ptr<Channel> channel)
       : stub_(AFS::NewStub(channel)) {}
 
-  void DeleteFile(string path) {
-    ClientContext context;
-    DeleteFileRequest request;
-    DeleteFileReply reply;
-
-    request.set_path(path);
-    
-    Status status = stub_->DeleteFile(&context, request, &reply);
-
-    if (status.ok()) {
-      std::cout << "answer from server:" << reply.error() << std::endl;
-    } else {
-      std::cout << "SendInt rpc failed." << std::endl;
-    }
-    
-    return;
-  }
-
   int GetAttr(string path, struct stat* output){
     printf("Reached afs_client GetAttr: %s\n", path.c_str());
     GetAttrReply reply;
@@ -173,6 +155,18 @@ class AFSClient {
       request.set_flags(fi->flags);
 
       Status status = stub_->Create(&context, request, &reply);
+
+      return reply.error();
+  }
+
+  int DeleteFile(string path) {
+      ClientContext context;
+      DeleteFileRequest request;
+      DeleteFileReply reply;
+
+      request.set_path(path);
+
+      Status status = stub_->DeleteFile(&context, request, &reply);
 
       return reply.error();
   }

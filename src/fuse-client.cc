@@ -64,7 +64,7 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
     printf("entered:xmp_getattr: %d\n", count_getattr);
 	int res;
 	memset(stbuf, 0, sizeof(struct stat));
-	return  afsClient->GetAttr(path, stbuf);
+	return afsClient->GetAttr(path, stbuf);
 }
 
 static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -140,15 +140,34 @@ static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
 	int res = afsClient->Create(path, fi, mode);
 	if (res == -1) {
-		// TDDO: return -errno?
+		cout << "server create failed with:" << res << endl;
 		return -1;
 	}
 
 	res = open((getCachePath() + string(path)).c_str(), fi->flags, mode);
-	if (res == -1)
-			return -errno;
+	if (res == -1) {
+		cout << "local open failed with:" << -errno << endl;
+		return res;
+	}
+
 	fi->fh = res;
 	return 0;
+}
+
+static int xmp_unlink(const char *path)
+{
+	int res = afsClient->DeleteFile(path);
+	if (res == -1) {
+		cout << "server unlink failed with:" << res << endl;
+		return -1;
+	}
+
+	res = unlink((getCachePath() + string(path)).c_str());
+	if (res == -1) {
+		cout << "local unlink failed with:" << -errno << endl;
+	}
+
+	return res;
 }
 
 static struct client_ops: fuse_operations {
@@ -160,6 +179,7 @@ static struct client_ops: fuse_operations {
 		rmdir 	= xmp_rmdir;
 		// open 	= xmp_open;
 		create 	= xmp_create;
+		unlink  = xmp_unlink;
 	}
 } xmp_oper;
 

@@ -20,15 +20,6 @@ class AFSServiceImpl final : public AFS::Service {
 
   const char *serverPath = "/home/hemalkumar/hemal/server";
 
-  Status DeleteFile(ServerContext* context, const DeleteFileRequest* request,
-                  DeleteFileReply* reply) override {
-    std:string path = request->path();
-
-    reply->set_error(0);
-
-    return Status::OK;
-  }
-
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
                   MakeDirReply* reply) override {
 
@@ -136,6 +127,20 @@ class AFSServiceImpl final : public AFS::Service {
     int res = open(path.c_str(), request->flags(), request->mode());
 
     cout << "Server Attempted to Create File at:" << path << " with res:" << res << endl;
+
+    if (res == -1) {
+  	  reply->set_error(res);
+    } else {
+      reply->set_error(0);
+    }
+    return Status::OK;
+  }
+
+  Status DeleteFile(ServerContext *context, const DeleteFileRequest *request, DeleteFileReply *reply) {
+    string path = serverPath + string(request->path());
+    int res = unlink(path.c_str());
+
+    cout << "Server Attempted to Delete File at:" << path << " with res:" << res << endl;
 
     if (res == -1) {
   	  reply->set_error(res);
