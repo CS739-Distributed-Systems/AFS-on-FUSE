@@ -48,7 +48,7 @@ class AFSClient {
     if(reply.error() != 0){
       return -reply.error();
     }
-    printf("Successful GetAttr: %s\n", path.c_str());
+    // printf("Successful GetAttr: %s\n", path.c_str());
     output->st_ino = reply.inode();
     output->st_mode = reply.mode();
     output->st_nlink = reply.num_hlinks();
@@ -60,11 +60,11 @@ class AFSClient {
     output->st_atime = reply.last_acess_time();
     output->st_mtime = reply.last_mod_time();
     output->st_ctime = reply.last_stat_change_time();
-    cout<<output->st_mtime<<endl;
-    cout<<reply.last_mod_time()<<endl;
-    cout<<reply.last_acess_time()<<endl; // understand
-    cout<<reply.last_stat_change_time()<<endl;
-    printf("done\n");
+    // cout<<output->st_mtime<<endl;
+    // cout<<reply.last_mod_time()<<endl;
+    // cout<<reply.last_acess_time()<<endl; // understand
+    // cout<<reply.last_stat_change_time()<<endl;
+    //printf("done\n");
  
     return 0;
   }
@@ -94,24 +94,34 @@ class AFSClient {
   }
 
   bool fileExisitsInsideCache(string path){
-      return false; //TODO
+    struct stat stbuf;
+      memset(&stbuf, 0, sizeof(struct stat));
+      std::string pathname = cache_path + path;
+      cout<<"checking if file "<<pathname<<" exists in cahce"<<endl;
+	    int res = lstat(pathname.c_str(), &stbuf);
+      return res == 0;
   }
 
   int cacheFileLocally(string buffer, unsigned int size, const string path){
+    cout<<__func__<<__LINE__<<endl;
     int fd = open((cache_path + path).c_str(), O_WRONLY);
     if(fd == -1){
+      cout<<"open local failed"<<__func__<<endl;
       perror(strerror(errno));
       return errno;
     }
+    cout<<__func__<<__LINE__<<endl;
     off_t offset = 0;
     int res = pwrite(fd, buffer.c_str(), size, offset);
     fsync(fd);
+    cout<<__func__<<__LINE__<<endl;
     if(res == -1){
+      cout<<"pwrte local failed"<<__func__<<endl;
       perror(strerror(errno));
       return errno;
     }
-    if(fd>0)
-      close(fd);
+    cout<<__func__<<__LINE__<<endl;
+    close(fd);
     return 0;    // TODO: check the error code
    }
 
@@ -119,6 +129,7 @@ class AFSClient {
     // check if file exists inside cache and set fh to fi
 
     if(!fileExisitsInsideCache(path)) { 
+      cout<<"file was not there in cache"<<endl;
     // fetch the file from the server and save it
       ClientContext context;
       OpenRequest request;
@@ -133,16 +144,86 @@ class AFSClient {
       //  return -1;
         //return reply->error(); //TODO: return proper error code
       //}
+      cout<<"client got bytes "<<reply.size()<<endl;
       cacheFileLocally(reply.buffer(), reply.size(), request.path());       // TODO: check name of the file
     }
     int fd = open((cache_path + string(path)).c_str(), fi->flags);
     if(fd == -1){
+      cout<<"file open failed in client "<<__func__<<endl;
       perror(strerror(errno));
       return errno;
     }
     fi->fh = fd; 
     // read the file and set its fh to fi->fh and return
     return 0;
+  }
+
+  int Close(string path, struct fuse_file_info *fi){
+      cout<<"close "<<__func__<<endl;
+      ClientContext context;
+      CloseRequest request;
+      CloseReply reply;
+
+      request.set_path(path);
+      cout<<"close "<<__LINE__<<endl;
+
+      ReadFileLocally(fi->fh, request);
+      cout<<"close "<<__LINE__<<endl;
+      cout<<"done buf as "<<request.buffer()<<endl;
+
+      request.set_offset(0);
+      Status status = stub_->Close(&context, request, &reply);
+      
+      return -reply.error();
+
+  }
+
+  void ReadFileLocally(uint64_t fd, CloseRequest &request){
+    cout<<"reading file locally in client"<<endl;;
+    struct stat s;
+    if (fstat(fd, &s) == -1) {
+      printf("fstat failed in cache\n");
+      perror(strerror(errno));
+      return;
+    }
+    off_t fsize = s.st_size;
+    char *buf = new char[fsize];
+    cout << "got cache size as :" << fsize << endl;
+    off_t offset = 0;
+    int res = pread(fd, buf, fsize, offset);
+    if (res == -1){
+      cout << "pread failed" << endl;
+      perror(strerror(errno));
+      return;
+    }
+    request.set_buffer(buf);
+      request.set_size(fsize);
+      cout<<"saved buf as "<<request.buffer()<<endl;
+      
+    free(buf);
+}
+  void ReadFileLocally1(uint64_t fd){
+   
+    cout<<__LINE__<<__func__<<endl;
+      lseek(fd, 0, SEEK_SET);
+      cout<<__LINE__<<__func__<<endl;
+      int size = lseek(fd, (size_t)0, SEEK_END);
+      cout<<"ERRR:::: "<<size<<endl;
+      char *buf = new char[size];
+      //TODO ERROR HONGE ISSE BOHOT BADE
+      if(size ==0)
+        return;
+      cout<<__LINE__<<__func__<<endl;
+      lseek(fd, 0, SEEK_SET);
+      cout<<__LINE__<<__func__<<endl;
+      cout << "FD: " << fd << endl;
+      int res = pread(fd, buf, size, 0);
+      if (res == -1){
+        cout << "pread failed in " <<__func__<< endl;
+        perror(strerror(errno));
+      }
+      free(buf);
+
   }
 
   int Create(string path, struct fuse_file_info *fi, mode_t mode) {
@@ -176,40 +257,3 @@ class AFSClient {
  private:
   std::unique_ptr<AFS::Stub> stub_;
 };
-
-int main1(int argc, char** argv) {
-  std::string target_str;
-  std::string arg_str("--target");
-  if (argc > 1) {
-    std::string arg_val = argv[1];
-    size_t start_pos = arg_val.find(arg_str);
-    if (start_pos != std::string::npos) {
-      start_pos += arg_str.size();
-      if (arg_val[start_pos] == '=') {
-        target_str = arg_val.substr(start_pos + 1);
-      } else {
-        std::cout << "The only correct argument syntax is --target="
-                  << std::endl;
-        return 0;
-      }
-    } else {
-      std::cout << "The only acceptable argument is --target=" << std::endl;
-      return 0;
-    }
-  } else {
-    target_str = "localhost:50051";
-  }
-
-  AFSClient afsClient(
-      grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-
-  std::string fileName("junk file");
-  afsClient.DeleteFile(fileName);
-
-  return 0;
-}
-
-int test() {
-  printf("hello bullshit!\n");
-  return 40;
-}

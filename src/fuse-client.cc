@@ -61,7 +61,7 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 		       struct fuse_file_info *fi)
 {
     count_getattr++;
-    printf("entered:xmp_getattr: %d\n", count_getattr);
+    // printf("entered:xmp_getattr: %d\n", count_getattr);
 	int res;
 	memset(stbuf, 0, sizeof(struct stat));
 	return afsClient->GetAttr(path, stbuf);
@@ -136,6 +136,37 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
     return afsClient->Open(path, fi);
 }
 
+static int xmp_release(const char *path, struct fuse_file_info *fi)
+{
+	cout<<"release called"<<endl;
+    int res = 0;
+	afsClient->Close(path, fi);    
+	if (res == -1){
+      cout << "server close failed" << endl;
+    }
+	close(fi->fh);
+    return res;
+}
+
+static int xmp_flush(const char *path, struct fuse_file_info *fi)
+{
+	cout<<"flush called " << path << fi->fh<< endl;
+	
+	fsync(fi->fh);
+	int ret = close(dup(fi->fh));
+	cout<<"flush success"<<endl;
+	
+	// int ret = fsync(fi->fh);
+	// if (ret == -1){
+    //   cout << "xmp_flush failed" << endl;
+    //   perror(strerror(errno));
+    // } else {
+	// 	close(dup(fi->fh));
+	// 	cout<<"flush success"<<endl;
+	// }
+    return ret;
+}
+
 static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
 	int res = afsClient->Create(path, fi, mode);
@@ -144,13 +175,13 @@ static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		return -1;
 	}
 
-	res = open((getCachePath() + string(path)).c_str(), fi->flags, mode);
-	if (res == -1) {
-		cout << "local open failed with:" << -errno << endl;
-		return res;
+	int fd = open((getCachePath() + string(path)).c_str(), fi->flags, mode);
+	if (fd == -1) {
+		cout << "local open failed with:" << errno << endl;
+		return -1;
 	}
 
-	fi->fh = res;
+	fi->fh = fd;
 	return 0;
 }
 
@@ -177,7 +208,9 @@ static struct client_ops: fuse_operations {
 		readdir = xmp_readdir;
 		mkdir	= xmp_mkdir;
 		rmdir 	= xmp_rmdir;
-		// open 	= xmp_open;
+		open 	= xmp_open;
+		release = xmp_release;
+		flush   = xmp_flush; 
 		create 	= xmp_create;
 		unlink  = xmp_unlink;
 	}

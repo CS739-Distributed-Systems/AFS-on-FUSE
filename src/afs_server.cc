@@ -83,13 +83,14 @@ class AFSServiceImpl final : public AFS::Service {
 
   Status Open(ServerContext *context, const OpenRequest *request, OpenReply *reply){
     printf("Server Open stub\n");
-    int fd = open((serverPath + request->path()).c_str(), request->flags());
+    int fd = open((serverPath + request->path()).c_str(), O_RDONLY);
     if (fd == -1){
-      printf("File handle not present\n");
+      printf("could not open file\n");
       reply->set_error(errno);
       perror(strerror(errno));
       return Status::OK;
     }
+
     //calculate the size of the file
     struct stat s;
     if (fstat(fd, &s) == -1) {
@@ -99,6 +100,7 @@ class AFSServiceImpl final : public AFS::Service {
       close(fd);
       return Status::OK;
     }
+    
     off_t fsize = s.st_size;
     cout << "size:" << fsize << endl;
     char *buf = new char[fsize];
@@ -115,24 +117,26 @@ class AFSServiceImpl final : public AFS::Service {
     reply->set_error(0);
     reply->set_buffer(buf);
     reply->set_size(res);
-
-    if(fd>0)
-      close(fd);
+    cout<<"server had fd = "<<fd<<endl;
+    close(fd);
     free(buf);
     return Status::OK;
   }
 
   Status Create(ServerContext *context, const CreateRequest *request, CreateReply *reply){
     string path = serverPath + string(request->path());
-    int res = open(path.c_str(), request->flags(), request->mode());
+    int fd = open(path.c_str(), request->flags(), request->mode());
 
-    cout << "Server Attempted to Create File at:" << path << " with res:" << res << endl;
-
-    if (res == -1) {
-  	  reply->set_error(res);
+    cout << "Server Attempted to Create File at:" << path << " with fd:" << fd << endl;
+    
+    if (fd == -1) {
+      perror(strerror(errno));
+  	  reply->set_error(errno);
     } else {
+      close(fd);
       reply->set_error(0);
     }
+
     return Status::OK;
   }
 
@@ -149,6 +153,48 @@ class AFSServiceImpl final : public AFS::Service {
     }
     return Status::OK;
   }
+
+  Status Close(ServerContext *context, const CloseRequest *request, CloseReply *reply) {
+    
+    string path = serverPath + string(request->path());
+    cout << "Server close: " << path << endl;
+    
+    int res = WriteFile(request->buffer(), request->size(), path.c_str());
+
+    
+
+    if (res == -1) {
+  	  reply->set_error(res);
+    } else {
+      reply->set_error(0);
+    }
+    return Status::OK;
+  }
+
+   int WriteFile(string buffer, unsigned int size, const string path){
+    cout<<"server got data "<<buffer<<endl;
+
+    int fd = open(path.c_str(), O_WRONLY);
+    if(fd == -1){
+      cout<<"server open local failed"<<__func__<<endl;
+      perror(strerror(errno));
+      return errno;
+    }
+    cout<<__func__<<__LINE__<<endl;
+    off_t offset = 0;
+    int res = pwrite(fd, buffer.c_str(), size, offset);
+    fsync(fd);
+    cout<<__func__<<__LINE__<<endl;
+    if(res == -1){
+      cout<<"pwrite local failed in "<<__func__<<endl;
+      perror(strerror(errno));
+      return errno;
+    }
+    cout<<__func__<<__LINE__<<endl;
+    close(fd);
+    return 0;    // TODO: check the error code
+   }
+
 };
 
 void RunServer() {
