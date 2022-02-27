@@ -31,7 +31,7 @@
 #include "afs_client.cc"
 
 static int fill_dir_plus = 0;
-
+static string cache_path = "/users/akshay95/cache_dir"; 
 static int count_readdir = 0;
 static int count_getattr = 0;
 
@@ -102,7 +102,18 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int xmp_mkdir(const char *path, mode_t mode) {
     printf("akshay mkdir %s\n",path);
     
-    return afsClient->MakeDir(path, mode);
+    int res =  afsClient->MakeDir(path, mode);
+    if(res == 0){
+      cout<<"mkdir success on server"<<endl;
+      int local_res = mkdir((cache_path + string(path)).c_str(), mode);
+      if(local_res !=0){
+        //TODO what to do if server pass but local dir fails
+        cout<<"client local dir creation failed"<<endl;
+      }
+    } else {
+      cout<<"server dir failed "<<endl;
+    }
+    return res;
 }
 
 static int xmp_rmdir(const char *path)
