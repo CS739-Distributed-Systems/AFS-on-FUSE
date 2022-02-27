@@ -1,3 +1,5 @@
+#define FUSE_USE_VERSION 31
+
 #include <iostream>
 #include <memory>
 #include <string>
@@ -8,7 +10,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <dirent.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <fuse.h>
 #include <grpcpp/grpcpp.h>
 #include "afs.grpc.pb.h"
 
@@ -17,6 +22,12 @@ using grpc::ClientContext;
 using grpc::Status;
 using namespace afs;
 using namespace std;
+
+static string cache_path = "/home/hemalkumar/hemal/client_cache_dir"; 
+
+string getCachePath() {
+  return cache_path;
+}
 
 class AFSClient {
  public:
@@ -99,6 +110,74 @@ class AFSClient {
 
     return -reply.error();
   }
+
+  bool fileExisitsInsideCache(string path){
+      return false; //TODO
+  }
+
+  int cacheFileLocally(string buffer, unsigned int size, const string path){
+    int fd = open((cache_path + path).c_str(), O_WRONLY);
+    if(fd == -1){
+      perror(strerror(errno));
+      return errno;
+    }
+    off_t offset = 0;
+    int res = pwrite(fd, buffer.c_str(), size, offset);
+    fsync(fd);
+    if(res == -1){
+      perror(strerror(errno));
+      return errno;
+    }
+    if(fd>0)
+      close(fd);
+    return 0;    // TODO: check the error code
+   }
+
+  int Open(string path, struct fuse_file_info *fi) {
+    // check if file exists inside cache and set fh to fi
+
+    if(!fileExisitsInsideCache(path)) { 
+    // fetch the file from the server and save it
+      ClientContext context;
+      OpenRequest request;
+      OpenReply reply;
+
+      request.set_path(path);
+      request.set_flags(fi->flags);
+
+      Status status = stub_->Open(&context, request, &reply);
+      // check if status is false
+      //if(status != Status::OK){
+      //  return -1;
+        //return reply->error(); //TODO: return proper error code
+      //}
+      cacheFileLocally(reply.buffer(), reply.size(), request.path());       // TODO: check name of the file
+    }
+    int fd = open((cache_path + string(path)).c_str(), fi->flags);
+    if(fd == -1){
+      perror(strerror(errno));
+      return errno;
+    }
+    fi->fh = fd; 
+    // read the file and set its fh to fi->fh and return
+    return 0;
+  }
+
+  int Create(string path, struct fuse_file_info *fi, mode_t mode) {
+      ClientContext context;
+      CreateRequest request;
+      CreateReply reply;
+
+      request.set_path(path);
+      request.set_mode(mode);
+      request.set_flags(fi->flags);
+
+      Status status = stub_->Create(&context, request, &reply);
+
+      return reply.error();
+  }
+
+
 
  private:
   std::unique_ptr<AFS::Stub> stub_;

@@ -2,7 +2,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
-
+#include <fcntl.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -18,7 +18,7 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/users/akshay95/server_space";
+  const char *serverPath = "/home/hemalkumar/hemal/server";
 
   Status DeleteFile(ServerContext* context, const DeleteFileRequest* request,
                   DeleteFileReply* reply) override {
@@ -87,6 +87,61 @@ class AFSServiceImpl final : public AFS::Service {
     reply->set_last_mod_time(st.st_mtime);
     reply->set_last_stat_change_time(st.st_ctime);
     reply->set_error(0);
+    return Status::OK;
+  }
+
+  Status Open(ServerContext *context, const OpenRequest *request, OpenReply *reply){
+    printf("Server Open stub\n");
+    int fd = open((serverPath + request->path()).c_str(), request->flags());
+    if (fd == -1){
+      printf("File handle not present\n");
+      reply->set_error(errno);
+      perror(strerror(errno));
+      return Status::OK;
+    }
+    //calculate the size of the file
+    struct stat s;
+    if (fstat(fd, &s) == -1) {
+      printf("fstat failed\n");
+      reply->set_error(errno);
+      perror(strerror(errno));
+      close(fd);
+      return Status::OK;
+    }
+    off_t fsize = s.st_size;
+    cout << "size:" << fsize << endl;
+    char *buf = new char[fsize];
+    off_t offset = 0;
+    int res = pread(fd, buf, fsize, offset);
+    if (res == -1){
+      cout << "pread failed" << endl;
+      reply->set_error(errno);
+      perror(strerror(errno));
+      close(fd);
+      return Status::OK;
+    }
+    printf("read bytes %d",res);
+    reply->set_error(0);
+    reply->set_buffer(buf);
+    reply->set_size(res);
+
+    if(fd>0)
+      close(fd);
+    free(buf);
+    return Status::OK;
+  }
+
+  Status Create(ServerContext *context, const CreateRequest *request, CreateReply *reply){
+    string path = serverPath + string(request->path());
+    int res = open(path.c_str(), request->flags(), request->mode());
+
+    cout << "Server Attempted to Create File at:" << path << " with res:" << res << endl;
+
+    if (res == -1) {
+  	  reply->set_error(res);
+    } else {
+      reply->set_error(0);
+    }
     return Status::OK;
   }
 };

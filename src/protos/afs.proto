@@ -24,8 +24,8 @@ package afs;
 service AFS {
   rpc GetAttr (GetAttrRequest) returns (GetAttrReply) {}
   rpc Open (OpenRequest) returns (OpenReply) {}
+  rpc Create (CreateRequest) returns (CreateReply) {}
   rpc Close (CloseRequest) returns (CloseReply) {}
-  rpc MakeFile (MakeFileRequest) returns (MakeFileReply) {}
   rpc DeleteFile (DeleteFileRequest) returns (DeleteFileReply) {}
   rpc MakeDir (MakeDirRequest) returns (MakeDirReply) {}
   rpc DeleteDir (DeleteDirRequest) returns (DeleteDirReply) {}
@@ -39,6 +39,14 @@ message GetAttrRequest {
 
 message OpenRequest {
     string path = 1;
+    int32 mode  = 2;
+    int32 flags = 3; 
+}
+
+message CreateRequest {
+    string path = 1;
+    int32 mode  = 2;
+    int32 flags = 3; 
 }
 
 message CloseRequest {
@@ -63,7 +71,6 @@ message DeleteDirRequest {
     string path = 1;
 }
 
-
 // The response messages
 message GetAttrReply {
   uint32 error = 1;  			// error code
@@ -82,16 +89,15 @@ message GetAttrReply {
 
 message OpenReply {
     uint32 error = 1;
-    string data = 2;
-    uint32 lastModTime = 3;
+    bytes  buffer = 2;
+    uint32 size = 3;
+}
+
+message CreateReply {
+    uint32 error = 1;
 }
 
 message CloseReply {
-    uint32 error = 1;
-    uint32 lastModTime = 2;
-}
-
-message MakeFileReply {
     uint32 error = 1;
     uint32 lastModTime = 2;
 }

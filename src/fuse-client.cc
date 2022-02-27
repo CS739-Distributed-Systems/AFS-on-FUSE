@@ -31,7 +31,6 @@
 #include "afs_client.cc"
 
 static int fill_dir_plus = 0;
-static string cache_path = "/users/akshay95/cache_dir"; 
 static int count_readdir = 0;
 static int count_getattr = 0;
 
@@ -105,7 +104,7 @@ static int xmp_mkdir(const char *path, mode_t mode) {
     int res =  afsClient->MakeDir(path, mode);
     if(res == 0){
       cout<<"mkdir success on server"<<endl;
-      int local_res = mkdir((cache_path + string(path)).c_str(), mode);
+      int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
       if(local_res !=0){
         //TODO what to do if server pass but local dir fails
         cout<<"client local dir creation failed"<<endl;
@@ -121,7 +120,7 @@ static int xmp_rmdir(const char *path)
     int res = afsClient->DeleteDir(path);
     if(res == 0){
       cout<<"mkdir success on server"<<endl;
-      int local_res = rmdir((cache_path + string(path)).c_str());
+      int local_res = rmdir((getCachePath() + string(path)).c_str());
       if(local_res !=0){
         //TODO what to do if server pass but local dir fails
         cout<<"client local dir creation failed"<<endl;
@@ -132,6 +131,26 @@ static int xmp_rmdir(const char *path)
     return res;
 }
 
+static int xmp_open(const char *path, struct fuse_file_info *fi)
+{
+    return afsClient->Open(path, fi);
+}
+
+static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+	int res = afsClient->Create(path, fi, mode);
+	if (res == -1) {
+		// TDDO: return -errno?
+		return -1;
+	}
+
+	res = open((getCachePath() + string(path)).c_str(), fi->flags, mode);
+	if (res == -1)
+			return -errno;
+	fi->fh = res;
+	return 0;
+}
+
 static struct client_ops: fuse_operations {
 	client_ops() {
 		init = xmp_init;
@@ -139,6 +158,8 @@ static struct client_ops: fuse_operations {
 		readdir = xmp_readdir;
 		mkdir	= xmp_mkdir;
 		rmdir 	= xmp_rmdir;
+		// open 	= xmp_open;
+		create 	= xmp_create;
 	}
 } xmp_oper;
 
