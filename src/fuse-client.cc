@@ -62,7 +62,17 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 {
     count_getattr++;
     printf("entered:xmp_getattr: %d\n", count_getattr);
-	int res;
+
+	std::string pathname = cache_path + path;
+	printf("GetAttr: %s \n", pathname.c_str());
+	int res = lstat(pathname.c_str(), stbuf);
+
+	if(res==0) {
+		cout<<"in cache"<<endl;
+		cout<<stbuf->st_ino<<endl;
+		return res;
+	}
+	cout<<"Not in cache, initiating RPC"<<endl;
 	memset(stbuf, 0, sizeof(struct stat));
 	return afsClient->GetAttr(path, stbuf);
 }
