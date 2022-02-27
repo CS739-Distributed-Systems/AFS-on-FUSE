@@ -118,16 +118,18 @@ static int xmp_mkdir(const char *path, mode_t mode) {
 
 static int xmp_rmdir(const char *path)
 {
-	int res;
-
-	// TODO: remmve local dir as well?
-	// res = rmdir(path);
-	res = afsClient->DeleteDir(path);
-
-	if (res == -1)
-		return -errno;
-
-	return 0;
+    int res = afsClient->DeleteDir(path);
+    if(res == 0){
+      cout<<"mkdir success on server"<<endl;
+      int local_res = rmdir((cache_path + string(path)).c_str());
+      if(local_res !=0){
+        //TODO what to do if server pass but local dir fails
+        cout<<"client local dir creation failed"<<endl;
+      }
+    } else {
+      cout<<"server dir failed "<<endl;
+    }
+    return res;
 }
 
 static struct client_ops: fuse_operations {
