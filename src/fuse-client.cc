@@ -63,14 +63,9 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 {
     count_getattr++;
     printf("entered:xmp_getattr: %d\n", count_getattr);
-	(void) fi;
 	int res;
-	res = afsClient->GetAttr(path, stbuf);
-	res = lstat(path, stbuf);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	memset(stbuf, 0, sizeof(struct stat));
+	return  afsClient->GetAttr(path, stbuf);
 }
 
 static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -106,7 +101,7 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int xmp_mkdir(const char *path, mode_t mode) {
     printf("akshay mkdir %s\n",path);
-	// TODO: create local dir as well?
+    
     return afsClient->MakeDir(path, mode);
 }
 

@@ -42,7 +42,7 @@ class AFSClient {
   }
 
   int GetAttr(string path, struct stat* output){
-    printf("Reached afs_client GetAttr\n");
+    printf("Reached afs_client GetAttr: %s\n", path.c_str());
     GetAttrReply reply;
     ClientContext context;
     GetAttrRequest request;
@@ -55,23 +55,24 @@ class AFSClient {
     if(reply.error() != 0){
       return -reply.error();
     }
-
+    printf("Successful GetAttr: %s\n", path.c_str());
     output->st_ino = reply.inode();
     output->st_mode = reply.mode();
-    // output->st_nlink = result.nlink();
-    // output->st_uid = reply.uid();
-    // output->st_gid = result.gid();
-    // output->st_size = result.size();
+    output->st_nlink = reply.num_hlinks();
+    output->st_uid = reply.user_id();
+    output->st_gid = reply.groud_id();
+    output->st_size = reply.size();
     output->st_blksize = reply.block_size();
     output->st_blocks = reply.blocks();
-    // output->st_atime = reply.
+    output->st_atime = reply.last_acess_time();
     output->st_mtime = reply.last_mod_time();
-    // output->st_ctime = reply.st_ctim();
+    output->st_ctime = reply.last_stat_change_time();
     cout<<output->st_mtime<<endl;
     cout<<reply.last_mod_time()<<endl;
     cout<<reply.last_acess_time()<<endl; // understand
     cout<<reply.last_stat_change_time()<<endl;
     printf("done\n");
+ 
     return 0;
   }
 
@@ -84,6 +85,8 @@ class AFSClient {
     request.set_path(path);
     request.set_mode(mode);
     Status status = stub_->MakeDir(&context, request, &reply);
+
+    return -reply.error();
   }
 
   int DeleteDir(string path){

@@ -18,7 +18,7 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/home/hemalkumar/hemal/server";
+  const char *serverPath = "/users/akshay95/server_space";
 
   Status DeleteFile(ServerContext* context, const DeleteFileRequest* request,
                   DeleteFileReply* reply) override {
@@ -65,7 +65,7 @@ class AFSServiceImpl final : public AFS::Service {
     printf("Reached server getAttr\n");
     int res;
     struct stat st;
-    std::string path = "/home/hemalkumar/server" + request->path(); // TODO: check path or add prefix if needed
+    std::string path = serverPath + request->path(); // TODO: check path or add prefix if needed
     printf("GetAttr: %s \n", path.c_str());
 
     res = lstat(path.c_str(), &st);
@@ -73,7 +73,7 @@ class AFSServiceImpl final : public AFS::Service {
     {
       perror(strerror(errno));
       reply->set_error(errno);
-      return Status::CANCELLED; // TODO: find apt error 
+      return Status::OK; // TODO: find apt error 
     }
     reply->set_inode(st.st_ino);
     reply->set_mode(st.st_mode);
