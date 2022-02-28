@@ -29,11 +29,16 @@ service AFS {
   rpc DeleteFile (DeleteFileRequest) returns (DeleteFileReply) {}
   rpc MakeDir (MakeDirRequest) returns (MakeDirReply) {}
   rpc DeleteDir (DeleteDirRequest) returns (DeleteDirReply) {}
+  rpc ReadDir (ReadDirRequest) returns (stream ReadDirReply) {}
 }
 // TODO: LOW: Allow write only when client has called open previously?
 
 // The request message containing the user's name.
 message GetAttrRequest {
+  string path = 1;
+}
+
+message ReadDirRequest {
   string path = 1;
 }
 
@@ -93,6 +98,13 @@ message OpenReply {
     uint32 error = 1;
     bytes  buffer = 2;
     uint32 size = 3;
+}
+
+message ReadDirReply{
+    uint32 dino  =1; 
+    string dname = 2;
+    uint32 dtype = 3;
+    int32 error = 4;
 }
 
 message CreateReply {

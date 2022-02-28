@@ -20,10 +20,12 @@
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
+using grpc::ClientReader;
+
 using namespace afs;
 using namespace std;
 
-static string cache_path = "/home/hemalkumar/reetu/client_cache_dir"; 
+static string cache_path = "/users/akshay95/cache_dir"; 
 
 string getCachePath() {
   return cache_path;
@@ -153,6 +155,35 @@ class AFSClient {
     // read the file and set its fh to fi->fh and return
     return 0;
   }
+
+  int ReadDir(string p, void *buf, fuse_fill_dir_t filler){
+      ClientContext context;
+      ReadDirRequest request;
+      ReadDirReply reply;
+      dirent de;
+      request.set_path(p);
+
+      std::unique_ptr<ClientReader<ReadDirReply> >reader(
+            stub_->ReadDir(&context, request));
+        while(reader->Read(&reply)){
+            struct stat st;
+            memset(&st, 0, sizeof(st));
+
+            de.d_ino = reply.dino();
+            strcpy(de.d_name, reply.dname().c_str());
+            de.d_type = reply.dtype();
+
+            st.st_ino = de.d_ino;
+            st.st_mode = de.d_type << 12;
+
+            if (filler(buf, de.d_name, &st, 0, static_cast<fuse_fill_dir_flags>(0)))
+                break;
+            }
+
+        Status status = reader->Finish();
+
+        return -reply.error();
+    }
 
   int Close(string path, struct fuse_file_info *fi){
       cout<<"close "<<__func__<<endl;

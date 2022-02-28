@@ -7,19 +7,20 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "afs.grpc.pb.h"
+#include <dirent.h>
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using grpc::ServerWriter;
 using namespace afs;
 using namespace std;
 
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/home/hemalkumar/hemal/server";
-	  //"/home/hemalkumar/hemal/server";
+  const char *serverPath = "/users/akshay95/server_space";
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
                   MakeDirReply* reply) override {
@@ -35,6 +36,33 @@ class AFSServiceImpl final : public AFS::Service {
      }
     return Status::OK;
   }
+
+  Status ReadDir(ServerContext* context, const ReadDirRequest* request,
+		  ServerWriter<ReadDirReply>* writer) override {
+
+		DIR *dp;
+		struct dirent *de;
+		ReadDirReply directory;
+
+		dp = opendir((serverPath + request->path()).c_str());
+		if (dp == NULL){
+			perror(strerror(errno));
+			directory.set_error(errno);
+                        return Status::OK;
+		}
+
+		while((de = readdir(dp)) != NULL){
+		    directory.set_dino(de->d_ino);
+		    directory.set_dname(de->d_name);
+		    directory.set_dtype(de->d_type);
+		    writer->Write(directory);
+		}
+		directory.set_error(0);
+
+		closedir(dp);
+
+		return Status::OK;
+   }
 
   Status DeleteDir(ServerContext* context, const DeleteDirRequest* request,
                   DeleteDirReply* reply) override {
