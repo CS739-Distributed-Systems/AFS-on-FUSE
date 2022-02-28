@@ -23,7 +23,7 @@ using grpc::Status;
 using namespace afs;
 using namespace std;
 
-static string cache_path = "/users/akshay95/cache_dir";
+static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 
 string getCachePath() {
   return cache_path;
@@ -193,15 +193,16 @@ class AFSClient {
     cout << "got cache size as :" << fsize << endl;
     cout<<"fd is "<<fd<<endl;
     off_t offset = 0;
+    // read returns -1 for error. Number for bytes for successful read op
     int res = read(fd, buf, fsize);
-    if (res != 0){
-      cout << "pread failed" << endl;
+    if (res == -1){
+      cout << "read failed" << endl;
       perror(strerror(errno));
       return;
     }
     request.set_buffer(buf);
-      request.set_size(fsize);
-      cout<<"saved buf as "<<request.buffer()<<endl;
+    request.set_size(fsize);
+    cout<<"saved buf as "<<request.buffer()<<endl;
       
     free(buf);
 }
