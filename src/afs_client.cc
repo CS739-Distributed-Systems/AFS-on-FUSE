@@ -23,7 +23,7 @@ using grpc::Status;
 using namespace afs;
 using namespace std;
 
-static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
+static string cache_path = "/home/hemalkumar/reetu/client_cache_dir"; 
 
 string getCachePath() {
   return cache_path;
@@ -74,11 +74,9 @@ class AFSClient {
     ClientContext context;
     MakeDirRequest request;
     MakeDirReply reply;
-
     request.set_path(path);
     request.set_mode(mode);
     Status status = stub_->MakeDir(&context, request, &reply);
-
     return -reply.error();
   }
 
@@ -86,23 +84,22 @@ class AFSClient {
     ClientContext context;
     DeleteDirRequest request;
     DeleteDirReply reply;
-
     request.set_path(path);
     Status status = stub_->DeleteDir(&context, request, &reply);
-
     return -reply.error();
   }
 
   bool fileExisitsInsideCache(string path){
     struct stat stbuf;
-      memset(&stbuf, 0, sizeof(struct stat));
-      std::string pathname = cache_path + path;
-      cout<<"checking if file "<<pathname<<" exists in cahce"<<endl;
-	    int res = lstat(pathname.c_str(), &stbuf);
-      return res == 0;
+    memset(&stbuf, 0, sizeof(struct stat));
+    std::string pathname = cache_path + path;
+    cout<<"checking if file "<<pathname<<" exists in cache"<<endl;
+	  int res = lstat(pathname.c_str(), &stbuf);
+    return res == 0;
   }
 
-  int cacheFileLocally(string buffer, unsigned int size, const string path){
+  int cacheFileLocally(string buffer, unsigned int size, const string path)
+  {
     cout<<__func__<<__LINE__<<endl;
     int fd = open((cache_path + path).c_str(), O_WRONLY);
     if(fd == -1){
@@ -123,30 +120,29 @@ class AFSClient {
     cout<<__func__<<__LINE__<<endl;
     close(fd);
     return 0;    // TODO: check the error code
-   }
+  }
 
   int Open(string path, struct fuse_file_info *fi) {
     // check if file exists inside cache and set fh to fi
-
     if(!fileExisitsInsideCache(path)) { 
       cout<<"file was not there in cache"<<endl;
-    // fetch the file from the server and save it
-      ClientContext context;
-      OpenRequest request;
-      OpenReply reply;
-
-      request.set_path(path);
-      request.set_flags(fi->flags);
-
-      Status status = stub_->Open(&context, request, &reply);
-      // check if status is false
-      //if(status != Status::OK){
-      //  return -1;
-        //return reply->error(); //TODO: return proper error code
-      //}
-      cout<<"client got bytes "<<reply.size()<<endl;
-      cacheFileLocally(reply.buffer(), reply.size(), request.path());       // TODO: check name of the file
+      fetchFileAndUpdateCache(path, fi);
+    } else {
+      struct stat result;
+      std::string path_in_cache = getCachePath() + path;
+      int statRes = stat(path_in_cache.c_str(), &result); 
+      if(statRes!=0)
+        cout<<"stat failed"<<statRes<<"path "<<path<<endl;
+      else {
+        auto cache_mod_time = result.st_mtime;
+        auto server_mod_time = getLastModTimeFromServer(path);
+        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+          cout<<"stale cache, fetching file from server"<<endl;
+          fetchFileAndUpdateCache(path, fi);
+        }
+      }
     }
+    
     int fd = open((cache_path + string(path)).c_str(), fi->flags);
     if(fd == -1){
       cout<<"file open failed in client "<<__func__<<endl;
@@ -256,7 +252,40 @@ class AFSClient {
       return reply.error();
   }
 
+  int getLastModTimeFromServer(string path){
+    GetAttrReply reply;
+    ClientContext context;
+    GetAttrRequest request;
+    request.set_path(path);
+    struct stat output;
+    memset(&output, 0, sizeof(struct stat));
 
+    Status status = stub_->GetAttr(&context, request , &reply);
+
+    if(reply.error() != 0){
+      return -1;
+    }
+    return reply.last_mod_time();
+  }
+
+
+  void fetchFileAndUpdateCache(string path, struct fuse_file_info *fi){
+    ClientContext context;
+    OpenRequest request;
+    OpenReply reply;
+
+    request.set_path(path);
+    request.set_flags(fi->flags);
+
+    Status status = stub_->Open(&context, request, &reply);
+      // check if status is false
+      //if(status != Status::OK){
+      //  return -1;
+        //return reply->error(); //TODO: return proper error code
+      //}
+    cacheFileLocally(reply.buffer(), reply.size(), request.path());
+    cout<<"client got bytes "<<reply.size()<<endl;      // TODO: check name of the file
+  }
 
  private:
   std::unique_ptr<AFS::Stub> stub_;
