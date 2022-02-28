@@ -147,13 +147,16 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)
 {
+	fsync(fi->fh);
+	close(fi->fh);
 	cout<<"release called"<<endl;
+	cout<<"release with fd: "<<fi->fh<<endl;
     int res = 0;
 	afsClient->Close(path, fi);    
 	if (res == -1){
       cout << "server close failed" << endl;
     }
-	close(fi->fh);
+	cout<<"close done &&&&&&& "<<fi->fh<<endl;
     return res;
 }
 
@@ -161,9 +164,9 @@ static int xmp_flush(const char *path, struct fuse_file_info *fi)
 {
 	cout<<"flush called " << path << fi->fh<< endl;
 	
-	fsync(fi->fh);
+	//fsync(fi->fh);
 	int ret = close(dup(fi->fh));
-	cout<<"flush success"<<endl;
+	cout<<"flush success with fd: "<<fi->fh<<endl;
 	
 	// int ret = fsync(fi->fh);
 	// if (ret == -1){
@@ -189,7 +192,7 @@ static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		cout << "local open failed with:" << errno << endl;
 		return -1;
 	}
-
+    cout<<"***********create with fd: "<<fd<<endl;
 	fi->fh = fd;
 	return 0;
 }
@@ -260,7 +263,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50052";
+	string target_str = "localhost:50051";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
@@ -276,3 +279,4 @@ int main(int argc, char *argv[])
 	}
 	return fuse_main(new_argc, new_argv, &xmp_oper, NULL);
 }
+

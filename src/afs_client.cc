@@ -16,14 +16,14 @@
 #include <fuse.h>
 #include <grpcpp/grpcpp.h>
 #include "afs.grpc.pb.h"
-
+#include <fcntl.h>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 using namespace afs;
 using namespace std;
 
-static string cache_path = "/home/hemalkumar/hemal/client_cache_dir"; 
+static string cache_path = "/users/akshay95/cache_dir";
 
 string getCachePath() {
   return cache_path;
@@ -166,8 +166,8 @@ class AFSClient {
 
       request.set_path(path);
       cout<<"close "<<__LINE__<<endl;
-
-      ReadFileLocally(fi->fh, request);
+      int _fd = open((getCachePath() + string(path)).c_str(), O_RDONLY);
+      ReadFileLocally(_fd, request);
       cout<<"close "<<__LINE__<<endl;
       cout<<"done buf as "<<request.buffer()<<endl;
 
@@ -178,20 +178,23 @@ class AFSClient {
 
   }
 
-  void ReadFileLocally(uint64_t fd, CloseRequest &request){
+  void ReadFileLocally(int fd, CloseRequest &request){
     cout<<"reading file locally in client"<<endl;;
     struct stat s;
-    if (fstat(fd, &s) == -1) {
+    if (fstat(fd, &s) != 0) {
       printf("fstat failed in cache\n");
       perror(strerror(errno));
       return;
     }
     off_t fsize = s.st_size;
-    char *buf = new char[fsize];
+   // fsize=1;
+    char *buf = new char[fsize+1];
+    buf[fsize] = '\0';
     cout << "got cache size as :" << fsize << endl;
+    cout<<"fd is "<<fd<<endl;
     off_t offset = 0;
-    int res = pread(fd, buf, fsize, offset);
-    if (res == -1){
+    int res = read(fd, buf, fsize);
+    if (res != 0){
       cout << "pread failed" << endl;
       perror(strerror(errno));
       return;
