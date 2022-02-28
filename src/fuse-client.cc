@@ -83,28 +83,7 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     count_readdir++;
     printf("entered:xmp_readdir: %d\n", count_readdir);
-	DIR *dp;
-	struct dirent *de;
-
-	(void) offset;
-	(void) fi;
-	(void) flags;
-
-	dp = opendir(path);
-	if (dp == NULL)
-		return -errno;
-
-	while ((de = readdir(dp)) != NULL) {
-		struct stat st;
-		memset(&st, 0, sizeof(st));
-		st.st_ino = de->d_ino;
-		st.st_mode = de->d_type << 12;
-		if (filler(buf, de->d_name, &st, 0, (fuse_fill_dir_flags)(fill_dir_plus)))
-			break;
-	}
-
-	closedir(dp);
-	return 0;
+    return afsClient->ReadDir(path, buf, filler);
 }
 
 static int xmp_mkdir(const char *path, mode_t mode) {
@@ -239,6 +218,19 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 	return res;
 }
 
+static int xmp_utimens(const char *path, const struct timespec ts[2],
+		       struct fuse_file_info *fi)
+{
+
+    int res = utimensat(AT_FDCWD, (getCachePath() + string(path)).c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    if (res == -1) {
+            perror(strerror(errno));
+    }
+    return res;
+    //TODO check if server call is needed 
+    //return afsClient->Utimes(path, fi, mode);
+}
+
 static struct client_ops: fuse_operations {
 	client_ops() {
 		init = xmp_init;
@@ -253,6 +245,7 @@ static struct client_ops: fuse_operations {
 		unlink  = xmp_unlink;
 		read	= xmp_read;
 		write 	= xmp_write;
+		utimens = xmp_utimens;
 	}
 } xmp_oper;
 

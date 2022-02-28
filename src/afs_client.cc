@@ -189,6 +189,34 @@ class AFSClient {
     // read the file and set its fh to fi->fh and return
     return 0;
   }
+  int ReadDir(string p, void *buf, fuse_fill_dir_t filler){
+      ClientContext context;
+      ReadDirRequest request;
+      ReadDirReply reply;
+      dirent de;
+      request.set_path(p);
+
+      std::unique_ptr<ClientReader<ReadDirReply> >reader(
+            stub_->ReadDir(&context, request));
+        while(reader->Read(&reply)){
+            struct stat st;
+            memset(&st, 0, sizeof(st));
+
+            de.d_ino = reply.dino();
+            strcpy(de.d_name, reply.dname().c_str());
+            de.d_type = reply.dtype();
+
+            st.st_ino = de.d_ino;
+            st.st_mode = de.d_type << 12;
+
+            if (filler(buf, de.d_name, &st, 0, static_cast<fuse_fill_dir_flags>(0)))
+                break;
+            }
+
+        Status status = reader->Finish();
+
+        return -reply.error();
+    }
 
   int Close(string path, struct fuse_file_info *fi){
       cout<<"close "<<__func__<<endl;
@@ -214,7 +242,7 @@ class AFSClient {
     int fd = open((getCachePath() + path).c_str(), O_RDONLY);
     if (fd == -1){
       cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
-      return errno;
+      return -1;
     }
 
     ClientContext context;
@@ -261,7 +289,7 @@ class AFSClient {
 
     // TODO: check status and retry operation if required
       
-    return -1;
+    return 0;
   }
 
   void ReadFileLocally(int fd, CloseRequest &request){

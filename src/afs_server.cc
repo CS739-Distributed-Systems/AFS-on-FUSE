@@ -7,6 +7,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "afs.grpc.pb.h"
+#include <dirent.h>
 
 #define BUF_SIZE 5
 
@@ -24,7 +25,6 @@ using namespace std;
 class AFSServiceImpl final : public AFS::Service {
 
   const char *serverPath = "/home/hemalkumar/hemal/server";
-	  //"/home/hemalkumar/hemal/server";
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
                   MakeDirReply* reply) override {
@@ -40,6 +40,33 @@ class AFSServiceImpl final : public AFS::Service {
      }
     return Status::OK;
   }
+
+  Status ReadDir(ServerContext* context, const ReadDirRequest* request,
+		  ServerWriter<ReadDirReply>* writer) override {
+
+		DIR *dp;
+		struct dirent *de;
+		ReadDirReply directory;
+
+		dp = opendir((serverPath + request->path()).c_str());
+		if (dp == NULL){
+			perror(strerror(errno));
+			directory.set_error(errno);
+                        return Status::OK;
+		}
+
+		while((de = readdir(dp)) != NULL){
+		    directory.set_dino(de->d_ino);
+		    directory.set_dname(de->d_name);
+		    directory.set_dtype(de->d_type);
+		    writer->Write(directory);
+		}
+		directory.set_error(0);
+
+		closedir(dp);
+
+		return Status::OK;
+   }
 
   Status DeleteDir(ServerContext* context, const DeleteDirRequest* request,
                   DeleteDirReply* reply) override {
@@ -238,7 +265,7 @@ class AFSServiceImpl final : public AFS::Service {
         if(fd == -1){
           cerr << "server tried to open file:" << path << endl;
           cerr <<"server close - local failed: with err - " << strerror(errno) << endl;
-          reply->set_error(errno);
+          reply->set_error(-1);
           return Status::OK; 
         }
 
@@ -248,7 +275,7 @@ class AFSServiceImpl final : public AFS::Service {
       res = write(fd, request.buffer().c_str(), request.size());
       if (res == -1) {
         cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
-        reply->set_error(errno);
+        reply->set_error(-1);
         return Status::OK; 
       }
     }
