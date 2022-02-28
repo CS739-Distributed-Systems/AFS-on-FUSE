@@ -20,10 +20,12 @@
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
+using grpc::ClientReader;
+using grpc::ClientWriter;
 using namespace afs;
 using namespace std;
 
-static string cache_path = "/home/hemalkumar/reetu/client_cache_dir"; 
+static string cache_path = "/home/hemalkumar/hemal/client_cache_dir"; 
 
 string getCachePath() {
   return cache_path;
@@ -154,6 +156,38 @@ class AFSClient {
     return 0;
   }
 
+  int OpenStream(string path, struct fuse_file_info *fi) {
+    // check if file exists inside cache and set fh to fi
+    if(!fileExisitsInsideCache(path)) { 
+      cout<<"file was not there in cache"<<endl;
+      fetchFileAndUpdateCache_stream(path, fi);
+    } else {
+      struct stat result;
+      std::string path_in_cache = getCachePath() + path;
+      int statRes = stat(path_in_cache.c_str(), &result); 
+      if(statRes!=0)
+        cout<<"stat failed"<<statRes<<"path "<<path<<endl;
+      else {
+        auto cache_mod_time = result.st_mtime;
+        auto server_mod_time = getLastModTimeFromServer(path);
+        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+          cout<<"stale cache, fetching file from server"<<endl;
+          fetchFileAndUpdateCache_stream(path, fi);
+        }
+      }
+    }
+    
+    int fd = open((cache_path + string(path)).c_str(), fi->flags);
+    if(fd == -1){
+      cout<<"file open failed in client "<<__func__<<endl;
+      perror(strerror(errno));
+      return errno;
+    }
+    fi->fh = fd; 
+    // read the file and set its fh to fi->fh and return
+    return 0;
+  }
+
   int Close(string path, struct fuse_file_info *fi){
       cout<<"close "<<__func__<<endl;
       ClientContext context;
@@ -268,6 +302,46 @@ class AFSClient {
     return reply.last_mod_time();
   }
 
+  int fetchFileAndUpdateCache_stream(string path, struct fuse_file_info *fi) {
+      // open file locally in write mode. If this fails then don't contact the server
+      int fd = open((getCachePath() + path).c_str(), O_WRONLY);
+      if(fd == -1){
+        cout<<"open local failed"<<__func__<<endl;
+        perror(strerror(errno));
+        // TODO: return errorno and honor it from the caller
+        return errno;
+      }
+
+      ClientContext context;
+      OpenRequest request;
+      OpenReply reply;
+      
+      request.set_path(path);
+      request.set_flags(fi->flags);
+
+      std::unique_ptr<ClientReader<OpenReply> > reader(
+        stub_->OpenStream(&context, request));
+
+      while (reader->Read(&reply)) {
+        // write to file
+        if (reply.error() != 0) {
+          // TODO: retry operation
+          // clean up and retry operation
+          return -1;
+        }
+
+        write(fd, reply.buffer().c_str(), reply.size());
+      }
+
+      Status status = reader->Finish();
+      // TODO: check if the read from server finished or not. 
+      // TODO: If not, then retry the whole operation
+
+      fsync(fd);
+      close(fd);
+
+      return 0;
+  }
 
   void fetchFileAndUpdateCache(string path, struct fuse_file_info *fi){
     ClientContext context;

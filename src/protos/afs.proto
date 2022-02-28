@@ -24,6 +24,7 @@ package afs;
 service AFS {
   rpc GetAttr (GetAttrRequest) returns (GetAttrReply) {}
   rpc Open (OpenRequest) returns (OpenReply) {}
+  rpc OpenStream (OpenRequest) returns (stream OpenReply) {}
   rpc Create (CreateRequest) returns (CreateReply) {}
   rpc Close (CloseRequest) returns (CloseReply) {}
   rpc DeleteFile (DeleteFileRequest) returns (DeleteFileReply) {}

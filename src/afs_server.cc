@@ -8,10 +8,15 @@
 #include <grpcpp/health_check_service_interface.h>
 #include "afs.grpc.pb.h"
 
+#define BUF_SIZE 5
+
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using grpc::ServerReader;
+using grpc::ServerWriter;
+
 using namespace afs;
 using namespace std;
 
@@ -124,6 +129,53 @@ class AFSServiceImpl final : public AFS::Service {
     return Status::OK;
   }
 
+  Status OpenStream(ServerContext* context, const OpenRequest* request, ServerWriter<OpenReply>* writer){
+    OpenReply reply;
+
+    printf("Server Open stub\n");
+    int fd = open((serverPath + request->path()).c_str(), O_RDONLY);
+    if (fd == -1){
+      printf("could not open file\n");
+      reply.set_error(errno);
+      perror(strerror(errno));
+      writer->Write(reply);
+      return Status::OK;
+    }
+
+    char *buf = new char[BUF_SIZE];
+
+    while(1) {
+      OpenReply reply;
+
+      int bytesRead = read(fd, buf, BUF_SIZE);
+
+      // done with the reading
+      if (bytesRead == 0) {
+        break;
+      }
+
+      // error with reading, inform client
+      if (bytesRead == -1) {
+        cerr << "server read error while reading op - err:" << errno << endl;
+        reply.set_error(errno);
+        writer->Write(reply);
+        return Status::OK;
+      }
+
+      reply.set_error(0);
+      reply.set_buffer(buf);
+      reply.set_size(bytesRead);
+
+      writer->Write(reply);
+      cout << "server sent bytes:" << bytesRead << endl;
+    }
+    
+    cout<<"server had fd = "<<fd<<endl;
+    close(fd);
+    free(buf);
+    return Status::OK;
+  }
+
   Status Create(ServerContext *context, const CreateRequest *request, CreateReply *reply){
     string path = serverPath + string(request->path());
     int fd = open(path.c_str(), request->flags(), request->mode());
@@ -199,7 +251,7 @@ class AFSServiceImpl final : public AFS::Service {
 };
 
 void RunServer() {
-  std::string server_address("0.0.0.0:50053");
+  std::string server_address("0.0.0.0:50054");
   AFSServiceImpl service;
 
   grpc::EnableDefaultHealthCheckService(true);

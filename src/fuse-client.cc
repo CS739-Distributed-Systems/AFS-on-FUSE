@@ -142,7 +142,7 @@ static int xmp_rmdir(const char *path)
 
 static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
-    return afsClient->Open(path, fi);
+    return afsClient->OpenStream(path, fi);
 }
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)
@@ -263,7 +263,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50053";
+	string target_str = "localhost:50054";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
