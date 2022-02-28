@@ -151,10 +151,10 @@ static int xmp_release(const char *path, struct fuse_file_info *fi)
 	close(fi->fh);
 	cout<<"release called"<<endl;
 	cout<<"release with fd: "<<fi->fh<<endl;
-    int res = 0;
-	afsClient->Close(path, fi);    
+    int res = afsClient->CloseStream(path, fi);    
 	if (res == -1){
-      cout << "server close failed" << endl;
+		// TODO: what to do if server close failed?
+		cout << "server close failed" << endl;
     }
 	cout<<"close done &&&&&&& "<<fi->fh<<endl;
     return res;

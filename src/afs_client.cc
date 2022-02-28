@@ -25,6 +25,8 @@ using grpc::ClientWriter;
 using namespace afs;
 using namespace std;
 
+#define BUF_SIZE 10
+
 static string cache_path = "/home/hemalkumar/hemal/client_cache_dir"; 
 
 string getCachePath() {
@@ -208,6 +210,60 @@ class AFSClient {
 
   }
 
+  int CloseStream(string path, struct fuse_file_info *fi){
+    int fd = open((getCachePath() + path).c_str(), O_RDONLY);
+    if (fd == -1){
+      cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
+      return errno;
+    }
+
+    ClientContext context;
+    CloseRequest request;
+    CloseReply reply;
+
+    request.set_path(path);
+    std::unique_ptr<ClientWriter<CloseRequest> > writer(
+        stub_->CloseStream(&context, &reply));
+
+    char *buf = new char[BUF_SIZE];
+
+    while(1) {
+      int bytesRead = read(fd, buf, BUF_SIZE);
+
+      // done with the reading
+      if (bytesRead == 0) {
+        break;
+      }
+
+      // error with reading, return -1
+      if (bytesRead == -1) {
+        cerr << "client read error while reading op - err:" << errno << endl;
+        return -1;
+      }
+
+      request.set_buffer(buf);
+      request.set_size(bytesRead);
+
+      if (!writer->Write(request)) {
+        cerr << "stream broke:" << errno << endl;
+        return -1;
+      }
+
+      cout << "client sent bytes:" << bytesRead << endl;
+    }
+    
+    writer->WritesDone();
+    Status status = writer->Finish();
+
+    cout<<"client had fd = "<<fd<<endl;
+    close(fd);
+    free(buf);
+
+    // TODO: check status and retry operation if required
+      
+    return -1;
+  }
+
   void ReadFileLocally(int fd, CloseRequest &request){
     cout<<"reading file locally in client"<<endl;;
     struct stat s;
@@ -330,7 +386,13 @@ class AFSClient {
           return -1;
         }
 
-        write(fd, reply.buffer().c_str(), reply.size());
+        int res = write(fd, reply.buffer().c_str(), reply.size());
+        if (res == -1) {
+          cerr << "write failed with err: " << errno << endl;
+          // TODO: retry operation
+          // clean up and retry operation
+          return -1;
+        }
       }
 
       Status status = reader->Finish();

@@ -214,8 +214,6 @@ class AFSServiceImpl final : public AFS::Service {
     
     int res = WriteFile(request->buffer(), request->size(), path.c_str());
 
-    
-
     if (res == -1) {
   	  reply->set_error(res);
     } else {
@@ -224,7 +222,46 @@ class AFSServiceImpl final : public AFS::Service {
     return Status::OK;
   }
 
-   int WriteFile(string buffer, unsigned int size, const string path){
+  Status CloseStream(ServerContext* context, ServerReader<CloseRequest>* reader,
+                     CloseReply* reply) {
+    
+    CloseRequest request;
+
+    int fd, res;
+    bool firstReq = true;
+
+    while (reader->Read(&request)) {
+      if (firstReq) {
+        string path = serverPath + string(request.path());
+        fd = open(path.c_str(), O_WRONLY);
+
+        if(fd == -1){
+          cerr << "server tried to open file:" << path << endl;
+          cerr <<"server close - local failed: with err - " << strerror(errno) << endl;
+          reply->set_error(errno);
+          return Status::OK; 
+        }
+
+        firstReq = false;
+      }
+
+      res = write(fd, request.buffer().c_str(), request.size());
+      if (res == -1) {
+        cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
+        reply->set_error(errno);
+        return Status::OK; 
+      }
+    }
+
+    fsync(fd);
+    close(fd);
+    reply->set_error(0);
+
+    return Status::OK; 
+  }
+  
+
+  int WriteFile(string buffer, unsigned int size, const string path){
     cout<<"server got data "<<buffer<<endl;
 
     int fd = open(path.c_str(), O_WRONLY);

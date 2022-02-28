@@ -27,6 +27,7 @@ service AFS {
   rpc OpenStream (OpenRequest) returns (stream OpenReply) {}
   rpc Create (CreateRequest) returns (CreateReply) {}
   rpc Close (CloseRequest) returns (CloseReply) {}
+  rpc CloseStream (stream CloseRequest) returns (CloseReply) {}
   rpc DeleteFile (DeleteFileRequest) returns (DeleteFileReply) {}
   rpc MakeDir (MakeDirRequest) returns (MakeDirReply) {}
   rpc DeleteDir (DeleteDirRequest) returns (DeleteDirReply) {}
