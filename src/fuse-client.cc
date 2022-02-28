@@ -69,7 +69,6 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 
 	if(res==0) {
 		cout<<"in cache"<<endl;
-		cout<<stbuf->st_ino<<endl;
 		return res;
 	}
 	cout<<"Not in cache, initiating RPC"<<endl;
@@ -211,6 +210,32 @@ static int xmp_unlink(const char *path)
 	return res;
 }
 
+static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
+    struct fuse_file_info *fi) {
+	
+	int res = pread(fi->fh, buf, size, offset);
+    if (res == -1){
+      cout << "pread failed" << endl;
+      perror(strerror(errno));
+    }
+	cout<<"buffer from pread : "<<buf<<endl;
+	return res;
+}
+
+
+static int xmp_write(const char *path, const char *buf, size_t size,
+             off_t offset, struct fuse_file_info *fi)
+{
+    
+	int res = pwrite(fi->fh, buf, size, offset);
+    if (res == -1){
+      cout << "pwrite failed" << endl;
+      perror(strerror(errno));
+    }
+	cout<<"buffer from pwrite : "<<buf<<endl;
+	return res;
+}
+
 static struct client_ops: fuse_operations {
 	client_ops() {
 		init = xmp_init;
@@ -223,6 +248,8 @@ static struct client_ops: fuse_operations {
 		flush   = xmp_flush; 
 		create 	= xmp_create;
 		unlink  = xmp_unlink;
+		read	= xmp_read;
+		write 	= xmp_write;
 	}
 } xmp_oper;
 
@@ -233,7 +260,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50051";
+	string target_str = "localhost:50052";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
