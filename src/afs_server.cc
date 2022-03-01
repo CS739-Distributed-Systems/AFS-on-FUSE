@@ -21,6 +21,11 @@ using namespace std;
 class AFSServiceImpl final : public AFS::Service {
 
   const char *serverPath = "/users/akshay95/server_space";
+  
+
+  string generateTempPath(string path){
+    return path + ".tmp";
+  }
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
                   MakeDirReply* reply) override {
@@ -187,11 +192,10 @@ class AFSServiceImpl final : public AFS::Service {
     
     string path = serverPath + string(request->path());
     cout << "Server close: " << path << endl;
-    
-    int res = WriteFile(request->buffer(), request->size(), path.c_str());
+    string tempPath = generateTempPath(path);
 
-    
-
+    int res = WriteToTempFile(request->buffer(), request->size(), tempPath.c_str());
+    SaveTempFileToCache(tempPath, path);
     if (res == -1) {
   	  reply->set_error(res);
     } else {
@@ -200,26 +204,30 @@ class AFSServiceImpl final : public AFS::Service {
     return Status::OK;
   }
 
-   int WriteFile(string buffer, unsigned int size, const string path){
-    cout<<"server got data "<<buffer<<endl;
+  void SaveTempFileToCache(string temp_file_path, string cache_file_path){
+      // moves the temp file to the cache file directory. Overwrites it
 
-    int fd = open(path.c_str(), O_WRONLY);
+      cout<<"Renaming "<<temp_file_path<<" to "<<cache_file_path<<endl;
+      rename(temp_file_path.c_str(), cache_file_path.c_str());
+  }
+
+   int WriteToTempFile(string buffer, unsigned int size, const string temp_path){
+    cout<<"server to write data "<<buffer<<" to file:"<<temp_path<<endl;
+
+    int fd = open(temp_path.c_str(), O_RDWR | O_CREAT, 0644);
     if(fd == -1){
-      cout<<"server open local failed"<<__func__<<endl;
+      cout<<"ERR: server open local failed"<<__func__<<endl;
       perror(strerror(errno));
       return errno;
     }
-    cout<<__func__<<__LINE__<<endl;
     off_t offset = 0;
     int res = pwrite(fd, buffer.c_str(), size, offset);
-    fsync(fd);
-    cout<<__func__<<__LINE__<<endl;
     if(res == -1){
-      cout<<"pwrite local failed in "<<__func__<<endl;
+      cout<<"ERR: pwrite local failed in "<<__func__<<endl;
       perror(strerror(errno));
       return errno;
     }
-    cout<<__func__<<__LINE__<<endl;
+    fsync(fd);
     close(fd);
     return 0;    // TODO: check the error code
    }

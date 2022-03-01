@@ -31,8 +31,6 @@
 #include "afs_client.cc"
 
 static int fill_dir_plus = 0;
-static int count_readdir = 0;
-static int count_getattr = 0;
 
 static AFSClient *afsClient;
 
@@ -60,9 +58,6 @@ static void *xmp_init(struct fuse_conn_info *conn,
 static int xmp_getattr(const char *path, struct stat *stbuf,
 		       struct fuse_file_info *fi)
 {
-    count_getattr++;
-    printf("entered:xmp_getattr: %d\n", count_getattr);
-
 	std::string pathname = cache_path + path;
 	printf("GetAttr: %s \n", pathname.c_str());
 	int res = lstat(pathname.c_str(), stbuf);
@@ -81,113 +76,103 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       enum fuse_readdir_flags flags)
 {
 
-    count_readdir++;
-    printf("entered:xmp_readdir: %d\n", count_readdir);
     return afsClient->ReadDir(path, buf, filler);
 }
 
 static int xmp_mkdir(const char *path, mode_t mode) {
-    printf("akshay mkdir %s\n",path);
-    
+    cout<<"======"<<__func__<<","<<path<<endl; 
     int res =  afsClient->MakeDir(path, mode);
     if(res == 0){
-      cout<<"mkdir success on server"<<endl;
       int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
       if(local_res !=0){
         //TODO what to do if server pass but local dir fails
-        cout<<"client local dir creation failed"<<endl;
+        cout<<"ERR: client local dir creation failed"<<endl;
       }
     } else {
-      cout<<"server dir failed "<<endl;
+      cout<<"ERR: server mkddir failed "<<endl;
     }
+    cout<<"########"<<__func__<<","<<path<<endl; 
     return res;
 }
 
 static int xmp_rmdir(const char *path)
 {
+    cout<<"======"<<__func__<<","<<path<<endl; 
     int res = afsClient->DeleteDir(path);
     if(res == 0){
-      cout<<"mkdir success on server"<<endl;
+      cout<<"rmdir success on server"<<endl;
       int local_res = rmdir((getCachePath() + string(path)).c_str());
       if(local_res !=0){
         //TODO what to do if server pass but local dir fails
-        cout<<"client local dir creation failed"<<endl;
+        cout<<"ERR: client local dir creation failed"<<endl;
       }
     } else {
-      cout<<"server dir failed "<<endl;
+      cout<<"ERR: server dir failed "<<endl;
     }
+    cout<<"#######"<<__func__<<","<<path<<endl; 
     return res;
 }
 
 static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
-    return afsClient->Open(path, fi);
+    cout<<"======"<<__func__<<","<<path<<endl; 
+    int res = afsClient->Open(path, fi);
+    cout<<"######"<<__func__<<","<<path<<endl; 
+    return res;
 }
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)
 {
+    cout<<"======"<<__func__<<","<<path<<endl; 
 	fsync(fi->fh);
 	close(fi->fh);
-	cout<<"release called"<<endl;
-	cout<<"release with fd: "<<fi->fh<<endl;
-    int res = 0;
+    cout<<"fsync and close done with fd: "<<fi->fh<<endl;
+        int res = 0;
 	afsClient->Close(path, fi);    
 	if (res == -1){
-      cout << "server close failed" << endl;
-    }
-	cout<<"close done &&&&&&& "<<fi->fh<<endl;
-    return res;
+          cout << "ERR: server close failed" << endl;
+        }
+        cout<<"#########"<<__func__<<","<<path<<endl; 
+        return res;
 }
 
 static int xmp_flush(const char *path, struct fuse_file_info *fi)
 {
-	cout<<"flush called " << path << fi->fh<< endl;
+    cout<<"======"<<__func__<<","<<path<<endl; 
 	
 	//fsync(fi->fh);
 	int ret = close(dup(fi->fh));
 	cout<<"flush success with fd: "<<fi->fh<<endl;
 	
-	// int ret = fsync(fi->fh);
-	// if (ret == -1){
-    //   cout << "xmp_flush failed" << endl;
-    //   perror(strerror(errno));
-    // } else {
-	// 	close(dup(fi->fh));
-	// 	cout<<"flush success"<<endl;
-	// }
     return ret;
 }
 
 static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
+    cout<<"======"<<__func__<<","<<path<<endl; 
 	int res = afsClient->Create(path, fi, mode);
 	if (res == -1) {
-		cout << "server create failed with:" << res << endl;
+		cout << "ERR: server create failed with:" << res << endl;
 		return -1;
 	}
-
-	int fd = open((getCachePath() + string(path)).c_str(), fi->flags, mode);
-	if (fd == -1) {
-		cout << "local open failed with:" << errno << endl;
-		return -1;
-	}
-    cout<<"***********create with fd: "<<fd<<endl;
-	fi->fh = fd;
+        cout<<"#########"<<__func__<<","<<path<<endl; 
 	return 0;
 }
 
 static int xmp_unlink(const char *path)
 {
+    cout<<"======"<<__func__<<","<<path<<endl; 
 	int res = afsClient->DeleteFile(path);
 	if (res == -1) {
-		cout << "server unlink failed with:" << res << endl;
+		cout << "ERR: server unlink failed with:" << res << endl;
 		return -1;
 	}
 
 	res = unlink((getCachePath() + string(path)).c_str());
 	if (res == -1) {
-		cout << "local unlink failed with:" << -errno << endl;
+		cout << "ERR: local unlink failed with:" << -errno << endl;
 	}
+    cout<<"#######"<<__func__<<","<<path<<endl; 
 
 	return res;
 }
@@ -195,12 +180,15 @@ static int xmp_unlink(const char *path)
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi) {
 	
+    cout<<"======"<<__func__<<","<<path<<endl;
+    cout<<"read with fd "<<fi->fh<<endl;
 	int res = pread(fi->fh, buf, size, offset);
     if (res == -1){
-      cout << "pread failed" << endl;
+      cout << "ERR: pread failed" << endl;
       perror(strerror(errno));
     }
 	cout<<"buffer from pread : "<<buf<<endl;
+    cout<<"#######"<<__func__<<","<<path<<endl; 
 	return res;
 }
 
@@ -209,12 +197,14 @@ static int xmp_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
     
+    cout<<"======"<<__func__<<","<<path<<endl; 
 	int res = pwrite(fi->fh, buf, size, offset);
     if (res == -1){
-      cout << "pwrite failed" << endl;
+      cout << "ERR: pwrite failed" << endl;
       perror(strerror(errno));
     }
 	cout<<"buffer from pwrite : "<<buf<<endl;
+    cout<<"########"<<__func__<<","<<path<<endl; 
 	return res;
 }
 
@@ -224,7 +214,8 @@ static int xmp_utimens(const char *path, const struct timespec ts[2],
 
     int res = utimensat(AT_FDCWD, (getCachePath() + string(path)).c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (res == -1) {
-            perror(strerror(errno));
+            cout<<"ERR: utimens error"<<endl;
+	    perror(strerror(errno));
     }
     return res;
     //TODO check if server call is needed 
