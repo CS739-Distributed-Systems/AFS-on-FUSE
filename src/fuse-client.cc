@@ -121,7 +121,7 @@ static int xmp_rmdir(const char *path)
 
 static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
-    return afsClient->OpenStream(path, fi);
+    return afsClient->Open(path, fi);
 }
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)

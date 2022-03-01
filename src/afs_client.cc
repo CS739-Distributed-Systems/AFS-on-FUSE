@@ -105,7 +105,7 @@ class AFSClient {
   int cacheFileLocally(string buffer, unsigned int size, const string path)
   {
     cout<<__func__<<__LINE__<<endl;
-    int fd = open((cache_path + path).c_str(), O_WRONLY);
+    int fd = open((cache_path + path).c_str(), O_WRONLY | O_CREAT | O_TRUNC);
     if(fd == -1){
       cout<<"open local failed"<<__func__<<endl;
       perror(strerror(errno));
@@ -388,7 +388,9 @@ class AFSClient {
 
   int fetchFileAndUpdateCache_stream(string path, struct fuse_file_info *fi) {
       // open file locally in write mode. If this fails then don't contact the server
-      int fd = open((getCachePath() + path).c_str(), O_WRONLY);
+      // create a new file if it does not exist
+      // We are fetching a new file from server anyway, should not be an issue
+      int fd = open((getCachePath() + path).c_str(), O_WRONLY | O_CREAT | O_TRUNC);
       if(fd == -1){
         cout<<"open local failed"<<__func__<<endl;
         perror(strerror(errno));
