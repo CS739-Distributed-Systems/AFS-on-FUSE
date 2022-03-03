@@ -116,7 +116,7 @@ static int xmp_rmdir(const char *path)
 static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
     cout<<"======"<<__func__<<","<<path<<endl; 
-    int res = afsClient->Open(path, fi);
+    int res = afsClient->OpenStream(path, fi);
     cout<<"######"<<__func__<<","<<path<<endl; 
     return res;
 }
@@ -128,7 +128,7 @@ static int xmp_release(const char *path, struct fuse_file_info *fi)
 	close(fi->fh);
          cout<<"fsync and close done with fd: "<<fi->fh<<endl;
         int res = 0;
-	afsClient->Close(path, fi);    
+	afsClient->CloseStream(path, fi);    
 	if (res == -1){
           cout << "ERR: server close failed" << endl;
         }
@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50054";
+	string target_str = "localhost:50053";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 

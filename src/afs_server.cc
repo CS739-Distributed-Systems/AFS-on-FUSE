@@ -24,8 +24,8 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/users/akshay95/server_space";
-  
+  // const char *serverPath = "/users/akshay95/server_space";
+  const char *serverPath = "/home/hemalkumar/hemal/server";
 
   string generateTempPath(string path){
     return path + ".tmp";
@@ -325,7 +325,7 @@ class AFSServiceImpl final : public AFS::Service {
 };
 
 void RunServer() {
-  std::string server_address("0.0.0.0:50054");
+  std::string server_address("0.0.0.0:50053");
   AFSServiceImpl service;
 
   grpc::EnableDefaultHealthCheckService(true);

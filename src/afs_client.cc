@@ -28,7 +28,8 @@ using namespace std;
 
 #define BUF_SIZE 10
 
-static string cache_path = "/users/akshay95/cache_dir"; 
+// static string cache_path = "/users/akshay95/cache_dir"; 
+static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 
 string getCachePath() {
   return cache_path;
@@ -240,16 +241,18 @@ class AFSClient {
       }
     }
     
-    int fd = open((cache_path + string(path)).c_str(), fi->flags);
-    if(fd == -1){
-      cout<<"file open failed in client "<<__func__<<endl;
-      perror(strerror(errno));
-      return errno;
-    }
-    fi->fh = fd; 
-    // read the file and set its fh to fi->fh and return
+    // int fd = open((cache_path + string(path)).c_str(), fi->flags);
+    // if(fd == -1){
+    //   cout<<"file open failed in client "<<__func__<<endl;
+    //   perror(strerror(errno));
+    //   return errno;
+    // }
+    // fi->fh = fd; 
+    fi->fh = createTemporaryFile(path, fi);
+    cout<<"Open set fh of temp file as "<<fi->fh<<endl;
     return 0;
   }
+
   int ReadDir(string p, void *buf, fuse_fill_dir_t filler){
       ClientContext context;
       ReadDirRequest request;
@@ -281,21 +284,30 @@ class AFSClient {
 
   int Close(string path, struct fuse_file_info *fi){
       cout<<"close "<<__func__<<endl;
+
+      // step - 1: save temp file to cache
+      SaveTempFileToCache(fi->fh, path);
+
       ClientContext context;
       CloseRequest request;
       CloseReply reply;
 
       request.set_path(path);
-      SaveTempFileToCache(fi->fh, path);
+      
+      // step - 2: flush file to server
       FlushFileToServer(path, request, fi);
+      
       cout<<"Client sending buffer as :"<<request.buffer()<<endl;
       Status status = stub_->Close(&context, request, &reply);
       cout<<"Close done "<<endl; 
       return -reply.error();
-
   }
 
   int CloseStream(string path, struct fuse_file_info *fi){
+    // step - 1: save temp file to cache
+    SaveTempFileToCache(fi->fh, path);
+
+    // step - 2: flush file to server
     int fd = open((getCachePath() + path).c_str(), O_RDONLY);
     if (fd == -1){
       cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
@@ -344,6 +356,8 @@ class AFSClient {
     close(fd);
     free(buf);
 
+    // SaveTempFileToCache(fi->fh, path);
+
     // TODO: check status and retry operation if required
       
     return 0;
@@ -388,7 +402,7 @@ class AFSClient {
     request.set_offset(0);
     request.set_buffer(buf);
     request.set_size(fsize);
-    cout<<"saved buf as "<<request.buffer()<<endl;
+    cout<<"saved buf size "<<request.size()<<endl;
     close(file_fd);
     free(buf);
 }
