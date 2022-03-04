@@ -100,7 +100,14 @@ class AFSClient {
       ClientContext context;
       status = stub_->MakeDir(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
-    
+
+    if(reply.error() == 0){
+      int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
+      if(local_res !=0){
+        //TODO what to do if server pass but local dir fails
+        cout<<"ERR: client local dir creation failed"<<endl;
+      }
+    }
     return -reply.error();
   }
 
@@ -117,15 +124,23 @@ class AFSClient {
       status = stub_->DeleteDir(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
+    if(reply.error() == 0){
+      cout<<"rmdir success on server"<<endl;
+      int local_res = rmdir((getCachePath() + string(path)).c_str());
+      if(local_res !=0){
+        //TODO what to do if server pass but local dir fails
+        cout<<"ERR: client local dir creation failed"<<endl;
+      }
+    } 
     return -reply.error();
   }
 
-  bool fileExisitsInsideCache(string path){
+  bool checkIfFileExistsViaLocalLstat(string path){
     struct stat stbuf;
     memset(&stbuf, 0, sizeof(struct stat));
-    std::string pathname = cache_path + path;
-    int res = lstat(pathname.c_str(), &stbuf);
-    cout<<"fileExistsInCache for "<<pathname<<" returns "<<(res == 0)<<endl;
+    //std::string pathname = cache_path + path;
+    int res = lstat(path.c_str(), &stbuf);
+    cout<<"Lstat for "<<path<<" returns "<<(res == 0)<<endl;
     return res == 0;
   }
 
@@ -153,9 +168,9 @@ class AFSClient {
 
   int Open(string path, struct fuse_file_info *fi) {
     // check if file exists inside cache and set fh to fi
-    if(!fileExisitsInsideCache(path)) { 
+    if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
       cout<<"file was not present in cache"<<endl;
-      fetchFileAndUpdateCache(path, fi);
+      fetchFileAndUpdateCache(path, fi);   //TODO ERR: shouldnt it be path ?????
     } else {
       cout<<"file was present in cache"<<endl;
       struct stat result;
@@ -188,41 +203,66 @@ class AFSClient {
     cout<<"Creating temp file with name "<<tmp_file_name<<endl;
     int dest_file_fd;
     if(mode == -1)
-	  dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, 0644);
+	    dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, 0644);
     else
-	  dest_file_fd = open(tmp_file_name.c_str(), fi -> flags, mode);
+	    dest_file_fd = open(tmp_file_name.c_str(), fi -> flags, mode);
     
     if(source_file_fd == -1 || dest_file_fd == -1){
       cout<<"ERR: file open failed for cacheFile/temporaryFile "<<__func__<<endl;
       cout<<source_file_fd<<", "<<dest_file_fd<<endl;
       perror(strerror(errno));
-      return errno;
+      return -errno;
     }
     struct stat stat_source;
     fstat(source_file_fd, &stat_source);
-    
-    off_t fsize = stat_source.st_size;
-    cout << "source file size:" << fsize << endl;
-    char *buf = new char[fsize];
-    off_t offset = 0;
-    int res = pread(source_file_fd, buf, fsize, offset);
-    if (res == -1){
-      cout << "ERR: pread of file failed" <<(cache_path + string(path))<< endl;
-      perror(strerror(errno));
+    char *buf = new char[BUF_SIZE];
+
+    while(1) {
+      int readBytes = read(source_file_fd, buf, BUF_SIZE);
+
+      if (readBytes == 0) {
+        break;
+      }
+
+      if (readBytes == -1) {
+        cerr<<"ERR: failed to read from source file "<<__func__<<endl;
+        perror(strerror(errno));
+        return -errno;
+      }
+
+      int bytesWritten = write(dest_file_fd, buf, readBytes);
+
+      if (bytesWritten == -1) {
+        cerr<<"ERR: failed to write to dest file "<<__func__<<endl;
+        perror(strerror(errno));
+        return -errno;
+      }
     }
-    int num_bytes = pwrite(dest_file_fd, buf, fsize, offset);
-    cout<<"Temp file creation passed, size = " <<num_bytes<<endl; 
-    if (res == -1){
-      cout << "ERR: pwrite of file failed" << (cache_path + string(path))<<endl;
-      perror(strerror(errno));
-    }
+
+    // off_t fsize = stat_source.st_size;
+    // cout << "source file size:" << fsize << endl;
+    // char *buf = new char[fsize];
+    // off_t offset = 0;
+    // int res = pread(source_file_fd, buf, fsize, offset);
+    // if (res == -1){
+    //   cout << "ERR: pread of file failed" <<(cache_path + string(path))<< endl;
+    //   perror(strerror(errno));
+    // }
+    // int num_bytes = pwrite(dest_file_fd, buf, fsize, offset);
+    // cout<<"Temp file creation passed, size = " <<num_bytes<<endl; 
+    // if (res == -1){
+    //   cout << "ERR: pwrite of file failed" << (cache_path + string(path))<<endl;
+    //   perror(strerror(errno));
+    // }
     close(source_file_fd);
     close(dest_file_fd);
+
     dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR, 0644);
     if (dest_file_fd == -1){
       cout << "ERR: open of file failed" <<tmp_file_name << endl;
       perror(strerror(errno));
     }
+
     cout<<"dest file fd was "<<dest_file_fd<<endl;
     if(fd_tmp_file_map.find(dest_file_fd) == fd_tmp_file_map.end()){
 	  cout<<"::::::: inserting inside map "<<dest_file_fd<<" " << tmp_file_name<<endl;
@@ -230,6 +270,7 @@ class AFSClient {
     } else{
         fd_tmp_file_map[dest_file_fd] = tmp_file_name;
     }
+
     free(buf);
     return dest_file_fd;
   }
@@ -238,18 +279,19 @@ class AFSClient {
     // check if file exists inside cache and set fh to fi
     int numberOfRetries=0;
     int res;
-    if(!fileExisitsInsideCache(path)) { 
+    if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
       cout<<"file was not there in cache"<<endl;
       do {
         res = fetchFileAndUpdateCache_stream(path, fi);
         numberOfRetries++;
       } while(res!=0 && numberOfRetries<MAX_RETRIES);
     } else {
+      cout<<"file was present in cache"<<endl;
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
       int statRes = stat(path_in_cache.c_str(), &result); 
       if(statRes!=0)
-        cout<<"stat failed"<<statRes<<"path "<<path<<endl;
+        cout<<"ERR: stat failed"<<statRes<<"path "<<path<<endl;
       else {
         auto cache_mod_time = result.st_mtime;
         auto server_mod_time = getLastModTimeFromServer(path);
@@ -262,15 +304,8 @@ class AFSClient {
         }
       }
     }
-    
-    int fd = open((cache_path + string(path)).c_str(), fi->flags);
-    if(fd == -1){
-      cout<<"file open failed in client "<<__func__<<endl;
-      perror(strerror(errno));
-      return errno;
-    }
-    fi->fh = fd; 
-    // read the file and set its fh to fi->fh and return
+    fi->fh = createTemporaryFile(path, fi);
+    cout<<"Open set fh of temp file as "<<fi->fh<<endl;
     return 0;
   }
   
@@ -306,15 +341,15 @@ class AFSClient {
 
   int Close(string path, struct fuse_file_info *fi){
     cout<<"close "<<__func__<<endl;
+    SaveTempFileToCache(fi->fh, path);
     CloseRequest request;
     request.set_path(path);
     CloseReply reply;
     reply.set_error(-1);
+    ReadTempFileIntoMemory(path, request, fi);
     Status status;
     int numberOfRetries = 0;
     int retry_interval = RETRY_INTERVAL;
-    SaveTempFileToCache(fi->fh, path);
-    FlushFileToServer(path, request, fi);
     cout<<"Client sending buffer as :"<<request.buffer()<<endl;
     do{
       ClientContext context;
@@ -326,6 +361,10 @@ class AFSClient {
   }
 
   int CloseStream(string path, struct fuse_file_info *fi){
+    // step - 1: save temp file to cache
+    SaveTempFileToCache(fi->fh, path);
+
+    // step - 2: flush file to server
     int fd = open((getCachePath() + path).c_str(), O_RDONLY);
     if (fd == -1){
       cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
@@ -374,6 +413,7 @@ class AFSClient {
     close(fd);
     free(buf);
 
+
     // TODO: check status and retry operation if required
       
     return 0;
@@ -390,7 +430,7 @@ class AFSClient {
       rename(temp_file.c_str(), cache_file.c_str());
   }
 
-  void FlushFileToServer(string path, CloseRequest &request, struct fuse_file_info *fi){
+  void ReadTempFileIntoMemory(string path, CloseRequest &request, struct fuse_file_info *fi){
     cout<<"reading cache file locally from client "<<(getCachePath() + path)<<endl;;
     
     int file_fd = open((getCachePath() + path).c_str(), O_RDONLY, 0644);
@@ -418,10 +458,45 @@ class AFSClient {
     request.set_offset(0);
     request.set_buffer(buf);
     request.set_size(fsize);
-    cout<<"saved buf as "<<request.buffer()<<endl;
+    cout<<"saved buf size "<<request.size()<<endl;
     close(file_fd);
     free(buf);
 }
+  void mirrorDirectoryStructureInsideCache(string cache_dir_path, string directory_path,  mode_t mode=0777){
+
+    cout<<"full_path = "<<directory_path<<endl;
+    cout<<"stripping string "<<directory_path.substr(0, directory_path.find_last_of("\\/"))<<endl;
+    string directories = (directory_path.substr(0, directory_path.find_last_of("\\/")));
+    directories = directories.substr(directories.find_first_of("\\/")+1);
+    if(checkIfFileExistsViaLocalLstat(getCachePath() + directories)){
+      cout<<"this directory already exists "<<getCachePath() + directories<<endl;
+      return;
+    }
+   		    
+    string dir;
+    string prefix = cache_dir_path;
+    while(directories.find("/") != std::string::npos){
+       dir = prefix + "/" + directories.substr(0, directories.find_first_of("\\/"));
+       cout<<"MakeDirectory on "<<dir<<endl;
+       int res = mkdir(dir.c_str(),mode);
+       if(res != 0){
+         cout << "ERR: MirrorDirectory: makedir failed "<<dir<< endl;
+         perror(strerror(errno));
+         return;
+       }
+       prefix = dir;
+       directories = directories.substr(directories.find_first_of("\\/")+1);
+    }
+    dir = prefix + "/" +directories;
+    cout<<"MakeDirectory on "<<dir<<endl;
+    int res = mkdir(dir.c_str(),mode);
+    if(res != 0){
+      cout << "ERR: MirrorDirectory: makedir failed " << dir << endl;
+      perror(strerror(errno));
+      return;
+    }
+    
+  }
 
   int Create(string path, struct fuse_file_info *fi, mode_t mode) {
     if(!fileExisitsInsideCache(path)) {
@@ -451,7 +526,24 @@ class AFSClient {
       status = stub_->Create(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
-    return reply.error();
+    if(reply.error() == 0){
+	    mirrorDirectoryStructureInsideCache(getCachePath(), path, mode);
+      if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) {
+          //create a new file inside cache directory
+	  //int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, mode);
+	      int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, 0644);
+        if (fd == -1) {
+          cout << "ERR: local cache create failed with:" << errno << endl;
+          perror(strerror(errno));
+	        return -1;
+	      }
+	      close(fd);
+      }
+        // create a temp file to work upon by the client
+        fi->fh = createTemporaryFile(path, fi, mode);
+      }
+
+      return reply.error();
   }
 
   //TODO check with temp perspective
@@ -497,7 +589,7 @@ class AFSClient {
       // We are fetching a new file from server anyway, should not be an issue
       int fd = open((getCachePath() + path).c_str(), O_WRONLY | O_CREAT | O_TRUNC);
       if(fd == -1){
-        cout<<"open local failed"<<__func__<<endl;
+        cout<<"Stream: open local failed"<<__func__<<endl;
         perror(strerror(errno));
         // TODO: return errorno and honor it from the caller
         return errno;
@@ -558,12 +650,14 @@ class AFSClient {
       //  return -1;
         //return reply->error(); //TODO: return proper error code
       //}
-    if(reply.error()!=0){
+    
+    if(reply.error() == 0){
+	    mirrorDirectoryStructureInsideCache(getCachePath(), path);
       cacheFileLocally(reply.buffer(), reply.size(), request.path(), fi);
       cout<<"client got bytes "<<reply.size()<<endl;      // TODO: check name of the file
-    }
-    else {
-      cout<<"reply error "<<reply.error()<<endl;
+    } else {
+      cacheFileLocally(reply.buffer(), reply.size(), request.path(), fi);
+      cout<<"error  "<<reply.error()<<endl;      // TODO: check name of the file
     }
   }
 
