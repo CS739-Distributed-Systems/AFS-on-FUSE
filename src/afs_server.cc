@@ -9,7 +9,7 @@
 #include "afs.grpc.pb.h"
 #include <dirent.h>
 
-#define BUF_SIZE 5
+#define BUF_SIZE 1
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -24,7 +24,7 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/home/hemalkumar/reetu/server";
+  const char *serverPath = "/home/hemalkumar/hemal/server";
   
 
   string generateTempPath(string path){

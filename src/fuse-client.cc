@@ -198,6 +198,9 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 {
     
     cout<<"======"<<__func__<<","<<path<<endl; 
+	
+	afsClient->Write(fi->fh);
+
 	int res = pwrite(fi->fh, buf, size, offset);
     if (res == -1){
       cout << "ERR: pwrite failed" << endl;
@@ -212,6 +215,7 @@ static int xmp_utimens(const char *path, const struct timespec ts[2],
 		       struct fuse_file_info *fi)
 {
 
+	cout << "*8************" << __func__ << "*8************" << endl;
     int res = utimensat(AT_FDCWD, (getCachePath() + string(path)).c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (res == -1) {
             cout<<"ERR: utimens error"<<endl;
@@ -261,6 +265,7 @@ int main(int argc, char *argv[])
 			new_argv[new_argc++] = argv[i];
 		}
 	}
+
 	return fuse_main(new_argc, new_argv, &xmp_oper, NULL);
 }
 

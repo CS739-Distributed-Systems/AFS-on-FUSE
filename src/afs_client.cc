@@ -19,6 +19,7 @@
 #include "afs.grpc.pb.h"
 #include <fcntl.h>
 #include <thread>
+#include <unordered_set>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
@@ -27,11 +28,11 @@ using grpc::ClientWriter;
 using namespace afs;
 using namespace std;
 
-#define BUF_SIZE 10
+#define BUF_SIZE 1
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
 
-static string cache_path = "/home/hemalkumar/reetu/client_cache_dir";
+static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 
 string getCachePath() {
   return cache_path;
@@ -49,7 +50,8 @@ class AFSClient {
  public:
   AFSClient(std::shared_ptr<Channel> channel)
       : stub_(AFS::NewStub(channel)) {
-        fd_tmp_file_map.clear();      
+        fd_tmp_file_map.clear();
+        dirty_temp_fd.clear();      
       }
 
   int GetAttr(string path, struct stat* output){
@@ -133,6 +135,11 @@ class AFSClient {
       }
     } 
     return -reply.error();
+  }
+
+  int Write(int fd) {
+    dirty_temp_fd.insert(fd);
+    return 0;
   }
 
   bool checkIfFileExistsViaLocalLstat(string path){
@@ -363,8 +370,16 @@ class AFSClient {
   int CloseStream(string path, struct fuse_file_info *fi){
     // step - 1: save temp file to cache
     SaveTempFileToCache(fi->fh, path);
+    // Step - 2 check if the file is dirty
+    if (dirty_temp_fd.find(fi->fh) == dirty_temp_fd.end()) {
+      cout << "not dirty, skipping flush to server" << endl;
+      return 0;
+    }
 
-    // step - 2: flush file to server
+    cout << "*********dirty" << endl;
+    dirty_temp_fd.erase(fi->fh);
+    
+    // step - 3: flush file to server
     int fd = open((getCachePath() + path).c_str(), O_RDONLY);
     if (fd == -1){
       cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
@@ -427,7 +442,22 @@ class AFSClient {
       string temp_file = fd_tmp_file_map[fd];
       string cache_file = getCachePath() + path;
       cout<<"Renaming "<<temp_file<<" to "<<cache_file<<endl;
+      // temp file stat
+      struct stat temp_st, cache_st;
+      memset(&temp_st, 0, sizeof(struct stat));
+      memset(&cache_st, 0, sizeof(struct stat));
+      int res1 = stat(temp_file.c_str(), &temp_st);
+
       rename(temp_file.c_str(), cache_file.c_str());
+      int res2 = stat(cache_file.c_str(), &cache_st);
+
+      // cache file stat
+
+      cout << "************ temp file time:" << temp_st.st_mtim.tv_nsec;
+      cout << "************ cache file time: " << cache_st.st_mtim.tv_nsec;
+
+      // cout << "************ temp file time:" << localtime(&temp_st.st_mtim) << endl;
+      // cout << "************ cache file time:" << localtime(&cache_st.st_mtim) << endl;
   }
 
   void ReadTempFileIntoMemory(string path, CloseRequest &request, struct fuse_file_info *fi){
@@ -499,7 +529,7 @@ class AFSClient {
   }
 
   int Create(string path, struct fuse_file_info *fi, mode_t mode) {
-    if(!fileExisitsInsideCache(path)) {
+    if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
       //create a new file inside cache directory
 	    //int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, mode);
 	    int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, 0644);
@@ -510,8 +540,7 @@ class AFSClient {
 	    }
 	    close(fd);
     }
-      // create a temp file to work upon by the client
-    fi->fh = createTemporaryFile(path, fi, mode);
+    
     CreateRequest request;
     request.set_path(path);
     request.set_mode(mode);
@@ -678,4 +707,5 @@ class AFSClient {
  private:
   std::unique_ptr<AFS::Stub> stub_;
   unordered_map<int, string> fd_tmp_file_map;
+  unordered_set<int> dirty_temp_fd;
 };
