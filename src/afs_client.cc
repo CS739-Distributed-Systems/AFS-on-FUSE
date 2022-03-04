@@ -18,6 +18,7 @@
 #include <grpcpp/grpcpp.h>
 #include "afs.grpc.pb.h"
 #include <fcntl.h>
+#include <thread>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
@@ -27,8 +28,10 @@ using namespace afs;
 using namespace std;
 
 #define BUF_SIZE 10
+#define RETRY_INTERVAL 100
+#define MAX_RETRIES 5
 
-static string cache_path = "/users/akshay95/cache_dir"; 
+static string cache_path = "/home/hemalkumar/reetu/client_cache_dir";
 
 string getCachePath() {
   return cache_path;
@@ -51,20 +54,25 @@ class AFSClient {
 
   int GetAttr(string path, struct stat* output){
     //printf("Reached afs_client GetAttr: %s\n", path.c_str());
-    GetAttrReply reply;
-    ClientContext context;
     GetAttrRequest request;
     request.set_path(path);
+    GetAttrReply reply;
+    reply.set_error(-1);
 
     memset(output, 0, sizeof(struct stat));
-
-    Status status = stub_->GetAttr(&context, request , &reply);
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    Status status;
+    do{
+      ClientContext context;
+      status = stub_->GetAttr(&context, request , &reply);
+    } while (reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
     if(reply.error() != 0){
       cout<<"ERR: GetAttr failed from server"<<endl;
       return -reply.error();
     }
-    // printf("Successful GetAttr: %s\n", path.c_str());
+
     output->st_ino = reply.inode();
     output->st_mode = reply.mode();
     output->st_nlink = reply.num_hlinks();
@@ -75,33 +83,40 @@ class AFSClient {
     output->st_blocks = reply.blocks();
     output->st_atime = reply.last_acess_time();
     output->st_mtime = reply.last_mod_time();
-    output->st_ctime = reply.last_stat_change_time();
-    // cout<<output->st_mtime<<endl;
-    // cout<<reply.last_mod_time()<<endl;
-    // cout<<reply.last_acess_time()<<endl; // understand
-    // cout<<reply.last_stat_change_time()<<endl;
-    //printf("done\n");
- 
+    output->st_ctime = reply.last_stat_change_time(); 
     return 0;
   }
 
-
   int MakeDir(string path, mode_t mode){
-    ClientContext context;
-    MakeDirRequest request;
     MakeDirReply reply;
+    reply.set_error(-1);
+    MakeDirRequest request;
     request.set_path(path);
     request.set_mode(mode);
-    Status status = stub_->MakeDir(&context, request, &reply);
+    Status status;
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do{
+      ClientContext context;
+      status = stub_->MakeDir(&context, request, &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    
     return -reply.error();
   }
 
   int DeleteDir(string path){
-    ClientContext context;
     DeleteDirRequest request;
-    DeleteDirReply reply;
     request.set_path(path);
-    Status status = stub_->DeleteDir(&context, request, &reply);
+    DeleteDirReply reply;
+    reply.set_error(-1);
+    Status status;
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do{
+      ClientContext context;
+      status = stub_->DeleteDir(&context, request, &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+
     return -reply.error();
   }
 
@@ -210,7 +225,7 @@ class AFSClient {
     }
     cout<<"dest file fd was "<<dest_file_fd<<endl;
     if(fd_tmp_file_map.find(dest_file_fd) == fd_tmp_file_map.end()){
-	cout<<"::::::: inserting inside map "<<dest_file_fd<<" " << tmp_file_name<<endl;
+	  cout<<"::::::: inserting inside map "<<dest_file_fd<<" " << tmp_file_name<<endl;
     	fd_tmp_file_map.insert({dest_file_fd, tmp_file_name});
     } else{
         fd_tmp_file_map[dest_file_fd] = tmp_file_name;
@@ -221,9 +236,14 @@ class AFSClient {
 
   int OpenStream(string path, struct fuse_file_info *fi) {
     // check if file exists inside cache and set fh to fi
+    int numberOfRetries=0;
+    int res;
     if(!fileExisitsInsideCache(path)) { 
       cout<<"file was not there in cache"<<endl;
-      fetchFileAndUpdateCache_stream(path, fi);
+      do {
+        res = fetchFileAndUpdateCache_stream(path, fi);
+        numberOfRetries++;
+      } while(res!=0 && numberOfRetries<MAX_RETRIES);
     } else {
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
@@ -235,7 +255,10 @@ class AFSClient {
         auto server_mod_time = getLastModTimeFromServer(path);
         if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
           cout<<"stale cache, fetching file from server"<<endl;
-          fetchFileAndUpdateCache_stream(path, fi);
+          do {
+            res = fetchFileAndUpdateCache_stream(path, fi);
+            numberOfRetries++;
+          } while(res!=0 && numberOfRetries<MAX_RETRIES);
         }
       }
     }
@@ -250,10 +273,12 @@ class AFSClient {
     // read the file and set its fh to fi->fh and return
     return 0;
   }
+  
   int ReadDir(string p, void *buf, fuse_fill_dir_t filler){
       ClientContext context;
       ReadDirRequest request;
       ReadDirReply reply;
+      reply.set_error(-1);
       dirent de;
       request.set_path(p);
 
@@ -280,19 +305,24 @@ class AFSClient {
   }
 
   int Close(string path, struct fuse_file_info *fi){
-      cout<<"close "<<__func__<<endl;
+    cout<<"close "<<__func__<<endl;
+    CloseRequest request;
+    request.set_path(path);
+    CloseReply reply;
+    reply.set_error(-1);
+    Status status;
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    SaveTempFileToCache(fi->fh, path);
+    FlushFileToServer(path, request, fi);
+    cout<<"Client sending buffer as :"<<request.buffer()<<endl;
+    do{
       ClientContext context;
-      CloseRequest request;
-      CloseReply reply;
-
-      request.set_path(path);
-      SaveTempFileToCache(fi->fh, path);
-      FlushFileToServer(path, request, fi);
-      cout<<"Client sending buffer as :"<<request.buffer()<<endl;
-      Status status = stub_->Close(&context, request, &reply);
-      cout<<"Close done "<<endl; 
-      return -reply.error();
-
+      status = stub_->Close(&context, request, &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+     
+    cout<<"Close done "<<endl; 
+    return -reply.error();
   }
 
   int CloseStream(string path, struct fuse_file_info *fi){
@@ -305,7 +335,7 @@ class AFSClient {
     ClientContext context;
     CloseRequest request;
     CloseReply reply;
-
+    reply.set_error(-1);
     request.set_path(path);
     std::unique_ptr<ClientWriter<CloseRequest> > writer(
         stub_->CloseStream(&context, &reply));
@@ -394,54 +424,66 @@ class AFSClient {
 }
 
   int Create(string path, struct fuse_file_info *fi, mode_t mode) {
-      if(!fileExisitsInsideCache(path)) {
-        //create a new file inside cache directory
-	//int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, mode);
-	int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, 0644);
-        if (fd == -1) {
-            cout << "ERR: local cache create failed with:" << errno << endl;
-            perror(strerror(errno));
-	    return -1;
-	}
-	close(fd);
-      }
+    if(!fileExisitsInsideCache(path)) {
+      //create a new file inside cache directory
+	    //int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, mode);
+	    int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, 0644);
+      if (fd == -1) {
+        cout << "ERR: local cache create failed with:" << errno << endl;
+        perror(strerror(errno));
+	      return -1;
+	    }
+	    close(fd);
+    }
       // create a temp file to work upon by the client
-      fi->fh = createTemporaryFile(path, fi, mode);
-
+    fi->fh = createTemporaryFile(path, fi, mode);
+    CreateRequest request;
+    request.set_path(path);
+    request.set_mode(mode);
+    request.set_flags(fi->flags);
+    CreateReply reply;
+    reply.set_error(-1);
+    Status status;
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do{
       ClientContext context;
-      CreateRequest request;
-      CreateReply reply;
+      status = stub_->Create(&context, request, &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
-      request.set_path(path);
-      request.set_mode(mode);
-      request.set_flags(fi->flags);
-
-      Status status = stub_->Create(&context, request, &reply);
-
-      return reply.error();
+    return reply.error();
   }
+
   //TODO check with temp perspective
   int DeleteFile(string path) {
+    DeleteFileReply reply;
+    reply.set_error(-1);
+    DeleteFileRequest request;
+    Status status; 
+    request.set_path(path);
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do {
       ClientContext context;
-      DeleteFileRequest request;
-      DeleteFileReply reply;
-
-      request.set_path(path);
-
-      Status status = stub_->DeleteFile(&context, request, &reply);
-
-      return reply.error();
+      status = stub_->DeleteFile(&context, request, &reply);
+    } while(reply.error()!=0 || retryRequired(status, retry_interval, ++numberOfRetries));
+    return reply.error();
   }
 
   int getLastModTimeFromServer(string path){
-    GetAttrReply reply;
-    ClientContext context;
     GetAttrRequest request;
     request.set_path(path);
+    GetAttrReply reply;
+    reply.set_error(-1);
+    Status status;
     struct stat output;
     memset(&output, 0, sizeof(struct stat));
-
-    Status status = stub_->GetAttr(&context, request , &reply);
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do {
+      ClientContext context;
+      status = stub_->GetAttr(&context, request , &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
     if(reply.error() != 0){
       return -1;
@@ -460,14 +502,14 @@ class AFSClient {
         // TODO: return errorno and honor it from the caller
         return errno;
       }
-
-      ClientContext context;
+    
+      
       OpenRequest request;
       OpenReply reply;
-      
+      reply.set_error(-1);
       request.set_path(path);
       request.set_flags(fi->flags);
-
+      ClientContext context;
       std::unique_ptr<ClientReader<OpenReply> > reader(
         stub_->OpenStream(&context, request));
 
@@ -491,7 +533,6 @@ class AFSClient {
       Status status = reader->Finish();
       // TODO: check if the read from server finished or not. 
       // TODO: If not, then retry the whole operation
-
       fsync(fd);
       close(fd);
 
@@ -499,21 +540,45 @@ class AFSClient {
   }
 
   void fetchFileAndUpdateCache(string path, struct fuse_file_info *fi){
-    ClientContext context;
     OpenRequest request;
     OpenReply reply;
-
+    reply.set_error(-1);
+    Status status;
     request.set_path(path);
     request.set_flags(fi->flags);
+    int numberOfRetries = 0;
+    int retry_interval = RETRY_INTERVAL;
+    do{
+      ClientContext context;
+      status = stub_->Open(&context, request, &reply);
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
-    Status status = stub_->Open(&context, request, &reply);
       // check if status is false
       //if(status != Status::OK){
       //  return -1;
         //return reply->error(); //TODO: return proper error code
       //}
-    cacheFileLocally(reply.buffer(), reply.size(), request.path(), fi);
-    cout<<"client got bytes "<<reply.size()<<endl;      // TODO: check name of the file
+    if(reply.error()!=0){
+      cacheFileLocally(reply.buffer(), reply.size(), request.path(), fi);
+      cout<<"client got bytes "<<reply.size()<<endl;      // TODO: check name of the file
+    }
+    else {
+      cout<<"reply error "<<reply.error()<<endl;
+    }
+  }
+
+  bool retryRequired(const Status &status, int &retry_interval, int numberOfRetries) {
+    if (status.ok() || numberOfRetries >= MAX_RETRIES) {
+      cout<<"Retry not needed"<<endl;
+      return false;
+    }
+    else {
+      cout<<"Retrying"<<endl;
+      std::this_thread::sleep_for (std::chrono::milliseconds(retry_interval));
+      retry_interval *= 2; 
+      cout<<"Slept, waking up"<<endl;
+      return true;
+    }
   }
 
  private:

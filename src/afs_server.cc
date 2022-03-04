@@ -24,7 +24,7 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/users/akshay95/server_space";
+  const char *serverPath = "/home/hemalkumar/reetu/server";
   
 
   string generateTempPath(string path){
@@ -33,12 +33,13 @@ class AFSServiceImpl final : public AFS::Service {
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
                   MakeDirReply* reply) override {
-
+    cout<<"Reached "<<__func__<<" on server"<<endl;
     int res = mkdir((serverPath + request->path()).c_str(), request->mode());
     if (res == -1) {
       printf("Error in mkdir ErrorNo: %d\n",errno);
       perror(strerror(errno));
       reply->set_error(errno);
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "path not found on server");
     } else {
       printf("MakeDirectory success\n");
       reply->set_error(0);
@@ -57,7 +58,7 @@ class AFSServiceImpl final : public AFS::Service {
 		if (dp == NULL){
 			perror(strerror(errno));
 			directory.set_error(errno);
-                        return Status::OK;
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "dp not found on server");
 		}
 
 		while((de = readdir(dp)) != NULL){
@@ -67,20 +68,21 @@ class AFSServiceImpl final : public AFS::Service {
 		    writer->Write(directory);
 		}
 		directory.set_error(0);
-
-		closedir(dp);
+    closedir(dp);
 
 		return Status::OK;
-   }
+  }
 
   Status DeleteDir(ServerContext* context, const DeleteDirRequest* request,
                   DeleteDirReply* reply) override {
-
+    cout<<"Reached "<<__func__<<" on server"<<endl;
     int res = rmdir((serverPath + request->path()).c_str());
     if (res == -1) {
       cout << "Error in DeleteDir ErrorNo: " << errno << endl;
       perror(strerror(errno));
       reply->set_error(errno);
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "path not found on server");
+      
     } else {
       cout << "DeleteDir success" << endl;
       reply->set_error(0);
@@ -91,7 +93,6 @@ class AFSServiceImpl final : public AFS::Service {
   Status GetAttr(ServerContext *context, const GetAttrRequest *request,
                  GetAttrReply *reply) override
   {
-    printf("Reached server getAttr\n");
     int res;
     struct stat st;
     std::string path = serverPath + request->path(); // TODO: check path or add prefix if needed
@@ -102,7 +103,7 @@ class AFSServiceImpl final : public AFS::Service {
     {
       perror(strerror(errno));
       reply->set_error(errno);
-      return Status::OK; // TODO: find apt error 
+      return Status::OK;
     }
     reply->set_inode(st.st_ino);
     reply->set_mode(st.st_mode);
@@ -126,7 +127,7 @@ class AFSServiceImpl final : public AFS::Service {
       printf("could not open file\n");
       reply->set_error(errno);
       perror(strerror(errno));
-      return Status::OK;
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     }
 
     //calculate the size of the file
@@ -136,7 +137,7 @@ class AFSServiceImpl final : public AFS::Service {
       reply->set_error(errno);
       perror(strerror(errno));
       close(fd);
-      return Status::OK;
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     }
     
     off_t fsize = s.st_size;
@@ -149,7 +150,7 @@ class AFSServiceImpl final : public AFS::Service {
       reply->set_error(errno);
       perror(strerror(errno));
       close(fd);
-      return Status::OK;
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     }
     printf("read bytes %d",res);
     reply->set_error(0);
@@ -171,7 +172,7 @@ class AFSServiceImpl final : public AFS::Service {
       reply.set_error(errno);
       perror(strerror(errno));
       writer->Write(reply);
-      return Status::OK;
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     }
 
     char *buf = new char[BUF_SIZE];
@@ -191,7 +192,7 @@ class AFSServiceImpl final : public AFS::Service {
         cerr << "server read error while reading op - err:" << errno << endl;
         reply.set_error(errno);
         writer->Write(reply);
-        return Status::OK;
+        return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
 
       reply.set_error(0);
@@ -217,6 +218,7 @@ class AFSServiceImpl final : public AFS::Service {
     if (fd == -1) {
       perror(strerror(errno));
   	  reply->set_error(errno);
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     } else {
       close(fd);
       reply->set_error(0);
@@ -233,6 +235,7 @@ class AFSServiceImpl final : public AFS::Service {
 
     if (res == -1) {
   	  reply->set_error(res);
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     } else {
       reply->set_error(0);
     }
@@ -249,6 +252,7 @@ class AFSServiceImpl final : public AFS::Service {
     SaveTempFileToCache(tempPath, path);
     if (res == -1) {
   	  reply->set_error(res);
+      return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     } else {
       reply->set_error(0);
     }
@@ -272,7 +276,7 @@ class AFSServiceImpl final : public AFS::Service {
           cerr << "server tried to open file:" << path << endl;
           cerr <<"server close - local failed: with err - " << strerror(errno) << endl;
           reply->set_error(-1);
-          return Status::OK; 
+          return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
         }
 
         firstReq = false;
@@ -282,7 +286,7 @@ class AFSServiceImpl final : public AFS::Service {
       if (res == -1) {
         cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
         reply->set_error(-1);
-        return Status::OK; 
+        return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
     }
 
