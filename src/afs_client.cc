@@ -20,17 +20,20 @@
 #include <fcntl.h>
 #include <thread>
 #include <unordered_set>
+#include <chrono>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 using grpc::ClientReader;
 using grpc::ClientWriter;
+
 using namespace afs;
 using namespace std;
 
 #define BUF_SIZE 1
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
+#define TIME_LIMIT 3
 
 static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 
@@ -67,11 +70,12 @@ class AFSClient {
     Status status;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->GetAttr(&context, request , &reply);
     } while (reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
     if(reply.error() != 0){
-      cout<<"ERR: GetAttr failed from server"<<endl;
+      cout<<"ERR: GetAttr failed from server"<<reply.error()<<endl;
       return -reply.error();
     }
 
@@ -100,6 +104,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->MakeDir(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
@@ -123,6 +128,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->DeleteDir(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
@@ -318,6 +324,7 @@ class AFSClient {
   
   int ReadDir(string p, void *buf, fuse_fill_dir_t filler){
       ClientContext context;
+      setContextDeadline(context);
       ReadDirRequest request;
       ReadDirReply reply;
       reply.set_error(-1);
@@ -360,6 +367,7 @@ class AFSClient {
     cout<<"Client sending buffer as :"<<request.buffer()<<endl;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->Close(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
      
@@ -387,6 +395,7 @@ class AFSClient {
     }
 
     ClientContext context;
+    setContextDeadline(context);
     CloseRequest request;
     CloseReply reply;
     reply.set_error(-1);
@@ -552,6 +561,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->Create(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
@@ -586,6 +596,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do {
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->DeleteFile(&context, request, &reply);
     } while(reply.error()!=0 || retryRequired(status, retry_interval, ++numberOfRetries));
     return reply.error();
@@ -603,6 +614,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do {
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->GetAttr(&context, request , &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
@@ -631,6 +643,7 @@ class AFSClient {
       request.set_path(path);
       request.set_flags(fi->flags);
       ClientContext context;
+      setContextDeadline(context);
       std::unique_ptr<ClientReader<OpenReply> > reader(
         stub_->OpenStream(&context, request));
 
@@ -671,6 +684,7 @@ class AFSClient {
     int retry_interval = RETRY_INTERVAL;
     do{
       ClientContext context;
+      setContextDeadline(context);
       status = stub_->Open(&context, request, &reply);
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
 
@@ -702,6 +716,12 @@ class AFSClient {
       cout<<"Slept, waking up"<<endl;
       return true;
     }
+  }
+
+  void setContextDeadline(ClientContext &context, int time_limit=TIME_LIMIT){
+    std::chrono::system_clock::time_point deadline =
+    std::chrono::system_clock::now() + std::chrono::seconds(time_limit);
+    context.set_deadline(deadline);
   }
 
  private:
