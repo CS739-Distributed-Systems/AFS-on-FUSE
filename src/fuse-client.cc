@@ -59,16 +59,34 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 		       struct fuse_file_info *fi)
 {
 	std::string pathname = cache_path + path;
-	printf("GetAttr: %s \n", pathname.c_str());
+
+	#ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << pathname << endl;
+	#endif
+	
 	int res = lstat(pathname.c_str(), stbuf);
 
 	if(res==0) {
-		cout<<"in cache"<<endl;
+		#ifdef IS_DEBUG_ON
+			cout<<"in cache"<<endl;
+			cout << "END:" << __func__ << endl;
+		#endif
 		return res;
 	}
-	cout<<"Not in cache, initiating RPC"<<endl;
+
+	#ifdef IS_DEBUG_ON
+		cout<<"Not in cache, initiating RPC"<<endl;
+	#endif
+
 	memset(stbuf, 0, sizeof(struct stat));
-	return afsClient->GetAttr(path, stbuf);
+
+	res = afsClient->GetAttr(path, stbuf);
+
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << endl;
+	#endif
+
+	return res;
 }
 
 static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -76,94 +94,138 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       enum fuse_readdir_flags flags)
 {
 
-    return afsClient->ReadDir(path, buf, filler);
+	#ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << endl;
+	#endif
+
+    int res = afsClient->ReadDir(path, buf, filler);
+
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << endl;
+	#endif
+
+	return res;
 }
 
 static int xmp_mkdir(const char *path, mode_t mode) {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
     int res =  afsClient->MakeDir(path, mode);
-    if(res == 0){
-      //int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
-      //if(local_res !=0){
-        //TODO what to do if server pass but local dir fails
-      //  cout<<"ERR: client local dir creation failed"<<endl;
-     // }
-    } else {
-      cout<<"ERR: server mkddir failed "<<endl;
+    
+	if(res != 0){
+	 	cout<<"ERR: server mkddir failed "<<endl;
     }
-    cout<<"########"<<__func__<<","<<path<<endl; 
+	
+    #ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
     return res;
 }
 
 static int xmp_rmdir(const char *path)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
     int res = afsClient->DeleteDir(path);
-    if(res == 0){
-    //  cout<<"rmdir success on server"<<endl;
-    //  int local_res = rmdir((getCachePath() + string(path)).c_str());
-    //  if(local_res !=0){
-        //TODO what to do if server pass but local dir fails
-    //    cout<<"ERR: client local dir creation failed"<<endl;
-    //  }
-    } else {
-      cout<<"ERR: server dir failed "<<endl;
+    
+	if(res != 0){
+      	cout<<"ERR: server dir failed "<<endl;
     }
-    cout<<"#######"<<__func__<<","<<path<<endl; 
+
+    #ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+
     return res;
 }
 
 static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
     int res = afsClient->OpenStream(path, fi);
-    cout<<"######"<<__func__<<","<<path<<endl; 
+    
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+
     return res;
 }
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
 	fsync(fi->fh);
 	close(fi->fh);
-         cout<<"fsync and close done with fd: "<<fi->fh<<endl;
-        int res = 0;
-	afsClient->CloseStream(path, fi);    
-	if (res == -1){
-          cout << "ERR: server close failed" << endl;
-        }
-        cout<<"#########"<<__func__<<","<<path<<endl; 
-        return res;
+
+	#ifdef IS_DEBUG_ON
+		cout<<"fsync and close done with fd: "<<fi->fh<<endl;
+	#endif
+    
+	int res = afsClient->CloseStream(path, fi);    
+	if (res != 0){
+        cout << "ERR: server close failed" << endl;
+    }
+    
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+    
+	return res;
 }
 
 static int xmp_flush(const char *path, struct fuse_file_info *fi)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
 	
-	//fsync(fi->fh);
 	int ret = close(dup(fi->fh));
-	cout<<"flush success with fd: "<<fi->fh<<endl;
+
+	#ifdef IS_DEBUG_ON
+		cout<<"flush success with fd: "<<fi->fh<<endl;
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
 	
     return ret;
 }
 
 static int xmp_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
 	int res = afsClient->Create(path, fi, mode);
-	if (res == -1) {
+
+	if (res != 0) {
 		cout << "ERR: server create failed with:" << res << endl;
 		return -1;
 	}
-        cout<<"#########"<<__func__<<","<<path<<endl; 
+    
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+
 	return 0;
 }
 
 static int xmp_unlink(const char *path)
 {
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
 	int res = afsClient->DeleteFile(path);
-	if (res == -1) {
+	if (res != 0) {
 		cout << "ERR: server unlink failed with:" << res << endl;
 		return -1;
 	}
@@ -172,7 +234,10 @@ static int xmp_unlink(const char *path)
 	if (res == -1) {
 		cout << "ERR: local unlink failed with:" << -errno << endl;
 	}
-    cout<<"#######"<<__func__<<","<<path<<endl; 
+
+    #ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
 
 	return res;
 }
@@ -180,15 +245,22 @@ static int xmp_unlink(const char *path)
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi) {
 	
-    cout<<"======"<<__func__<<","<<path<<endl;
-    cout<<"read with fd "<<fi->fh<<endl;
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+		cout<<"read with fd "<<fi->fh<<endl;
+	#endif
+
 	int res = pread(fi->fh, buf, size, offset);
-    if (res == -1){
+    
+	if (res == -1){
       cout << "ERR: pread failed" << endl;
       perror(strerror(errno));
     }
-	cout<<"buffer from pread : "<<buf<<endl;
-    cout<<"#######"<<__func__<<","<<path<<endl; 
+    
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+
 	return res;
 }
 
@@ -197,17 +269,24 @@ static int xmp_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
     
-    cout<<"======"<<__func__<<","<<path<<endl; 
+    #ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
 	
 	afsClient->Write(fi->fh);
 
 	int res = pwrite(fi->fh, buf, size, offset);
-    if (res == -1){
+    
+	if (res == -1){
       cout << "ERR: pwrite failed" << endl;
       perror(strerror(errno));
     }
-	cout<<"buffer from pwrite : "<<buf<<endl;
-    cout<<"########"<<__func__<<","<<path<<endl; 
+	
+
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+    
 	return res;
 }
 
@@ -215,12 +294,21 @@ static int xmp_utimens(const char *path, const struct timespec ts[2],
 		       struct fuse_file_info *fi)
 {
 
-	cout << "*8************" << __func__ << "*8************" << endl;
+	#ifdef IS_DEBUG_ON
+		cout << "START:" << __func__ << " " << path << endl;
+	#endif
+
     int res = utimensat(AT_FDCWD, (getCachePath() + string(path)).c_str(), ts, AT_SYMLINK_NOFOLLOW);
-    if (res == -1) {
-            cout<<"ERR: utimens error"<<endl;
+    
+	if (res == -1) {
+        cout<<"ERR: utimens error"<<endl;
 	    perror(strerror(errno));
     }
+
+	#ifdef IS_DEBUG_ON
+		cout << "END:" << __func__ << " " << path << endl;
+	#endif
+
     return res;
     //TODO check if server call is needed 
     //return afsClient->Utimes(path, fi, mode);
@@ -251,7 +339,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50054";
+	string target_str = "localhost:51054";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
