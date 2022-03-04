@@ -19,7 +19,11 @@
 #include "afs.grpc.pb.h"
 #include <fcntl.h>
 #include <thread>
+#include <unordered_set>
 #include <chrono>
+#include <fstream>
+#include <iostream>
+#include <experimental/filesystem>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
@@ -29,12 +33,14 @@ using grpc::ClientWriter;
 using namespace afs;
 using namespace std;
 
-#define BUF_SIZE 10
+#define BUF_SIZE 1
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
 #define TIME_LIMIT 3
 
-static string cache_path = "/home/hemalkumar/reetu/client_cache_dir";
+static string cache_path = "/users/akshay95/cache_dir";
+static std::string consistent_ext(".consistent");
+static std::string dirty_file_ext(".tmp");
 
 string getCachePath() {
   return cache_path;
@@ -52,8 +58,43 @@ class AFSClient {
  public:
   AFSClient(std::shared_ptr<Channel> channel)
       : stub_(AFS::NewStub(channel)) {
-        fd_tmp_file_map.clear();      
+        fd_tmp_file_map.clear();
+        dirty_temp_fd.clear();      
       }
+
+  void init(){
+    std::cout<<"Running Garbage Collector and Crash Recovery System"<<endl;
+
+    for (auto &p : std::experimental::filesystem::recursive_directory_iterator(cache_path))
+    {
+         if(p.path().extension().string().rfind(dirty_file_ext) == 0){
+           cout<<"deleting dirty tmp file: "<<p.path().string()<<endl;
+           int ret = unlink(p.path().string().c_str());
+           if(ret == -1){
+             cout<<"ERR: init deletion of dirty tmp file failed"<<__func__<<endl;
+             perror(strerror(errno));
+	   }
+         } else if (p.path().extension() == consistent_ext){
+
+          // fetch the original path after stripping .tmpXXX.consistent
+	  string absolute_path = p.path().string();
+	  string orig_path = absolute_path.substr(0, absolute_path.find_last_of("."));
+	  orig_path = orig_path.substr(0, orig_path.find_last_of("."));
+	  string cache_relative_path = orig_path.substr(orig_path.find(cache_path)+cache_path.size());
+	  
+	  // send the file to server
+          int res = flushFileToServer(absolute_path.c_str(), cache_relative_path);
+          if(res == -1){
+            cout<<"ERR: flushing to server failed"<<endl;
+          }
+
+          // rename the .consistent file to original name
+          SaveConsistentTempFileToCache(absolute_path, orig_path);
+
+        }
+    } 
+
+  }
 
   int GetAttr(string path, struct stat* output){
     //printf("Reached afs_client GetAttr: %s\n", path.c_str());
@@ -139,6 +180,11 @@ class AFSClient {
       }
     } 
     return -reply.error();
+  }
+
+  int Write(int fd) {
+    dirty_temp_fd.insert(fd);
+    return 0;
   }
 
   bool checkIfFileExistsViaLocalLstat(string path){
@@ -245,21 +291,6 @@ class AFSClient {
       }
     }
 
-    // off_t fsize = stat_source.st_size;
-    // cout << "source file size:" << fsize << endl;
-    // char *buf = new char[fsize];
-    // off_t offset = 0;
-    // int res = pread(source_file_fd, buf, fsize, offset);
-    // if (res == -1){
-    //   cout << "ERR: pread of file failed" <<(cache_path + string(path))<< endl;
-    //   perror(strerror(errno));
-    // }
-    // int num_bytes = pwrite(dest_file_fd, buf, fsize, offset);
-    // cout<<"Temp file creation passed, size = " <<num_bytes<<endl; 
-    // if (res == -1){
-    //   cout << "ERR: pwrite of file failed" << (cache_path + string(path))<<endl;
-    //   perror(strerror(errno));
-    // }
     close(source_file_fd);
     close(dest_file_fd);
 
@@ -348,12 +379,23 @@ class AFSClient {
 
   int Close(string path, struct fuse_file_info *fi){
     cout<<"close "<<__func__<<endl;
-    SaveTempFileToCache(fi->fh, path);
+    // step - 1: save temp file to consistent tmp file
+    string consistent_tmp_path = SaveTempFileToConsistentTemp(fi->fh);
+    
+    // Step - 2 If there are no changes to the file, skip sending it to server
+    if (dirty_temp_fd.find(fi->fh) == dirty_temp_fd.end()) {
+      cout << "not dirty, skipping flush to server" << endl;
+      //TODO: delete the tmp file as it is not modified (so not renamed to cache file)
+      deleteLocalFile(consistent_tmp_path);
+      return 0;
+    }
+    
+    // step - 3: flush consistent tmp file to server
     CloseRequest request;
     request.set_path(path);
     CloseReply reply;
     reply.set_error(-1);
-    ReadTempFileIntoMemory(path, request, fi);
+    ReadTempFileIntoMemory(consistent_tmp_path, request, fi);
     Status status;
     int numberOfRetries = 0;
     int retry_interval = RETRY_INTERVAL;
@@ -365,15 +407,54 @@ class AFSClient {
     } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
      
     cout<<"Close done "<<endl; 
+    
+    // step 4: Save the written file to cache file as well
+    SaveConsistentTempFileToCache(consistent_tmp_path, getCachePath() + path);
     return -reply.error();
   }
 
-  int CloseStream(string path, struct fuse_file_info *fi){
-    // step - 1: save temp file to cache
-    SaveTempFileToCache(fi->fh, path);
+  void deleteLocalFile(string file_path){
+    int res = unlink(file_path.c_str());
+    if (res == -1) {
+      std::cout<<"ERR: Error deleting file locally "<<file_path<<endl;
+      perror(strerror(errno));
+    }
+ 
+  }
 
-    // step - 2: flush file to server
-    int fd = open((getCachePath() + path).c_str(), O_RDONLY);
+  int CloseStream(string path, struct fuse_file_info *fi){
+    // step - 1: save temp file to consistent tmp file to indicate non-dirty local cache
+    string consistent_tmp_path = SaveTempFileToConsistentTemp(fi->fh);
+    
+    // Step - 2 If there are no changes to the file, skip sending it to server
+    if (dirty_temp_fd.find(fi->fh) == dirty_temp_fd.end()) {
+      cout << "not dirty, skipping flush to server" << endl;
+      //TODO: delete the consistent tmp file as it was not changed, hence not needed
+      deleteLocalFile(consistent_tmp_path);
+      return 0;
+    }
+
+    cout << "Local cache file was modified, So needs server flush" << endl;
+    dirty_temp_fd.erase(fi->fh);
+    
+    // step - 3: flush consistent tmp file to server
+    int res = flushFileToServer(consistent_tmp_path.c_str(), path);
+    if(res == -1){
+      cout<<"ERR: flushing to server failed"<<endl;
+    }
+    
+    // step 4: Save the written file to cache file as well
+    SaveConsistentTempFileToCache(consistent_tmp_path, getCachePath() + path);
+
+
+    // TODO: check status and retry operation if required
+      
+    return 0;
+  }
+
+  int flushFileToServer(string consistent_tmp_path, string path){
+
+    int fd = open(consistent_tmp_path.c_str(), O_RDONLY);
     if (fd == -1){
       cerr << "Close stream-client: could not open file:" << strerror(errno) << endl;
       return -1;
@@ -417,26 +498,32 @@ class AFSClient {
     
     writer->WritesDone();
     Status status = writer->Finish();
-
     cout<<"client had fd = "<<fd<<endl;
     close(fd);
     free(buf);
 
-
-    // TODO: check status and retry operation if required
-      
-    return 0;
   }
 
-  void SaveTempFileToCache(int fd, string path){
+  string SaveTempFileToConsistentTemp(int fd){
       // moves the temp file to the cache file directory. Overwrites it
       if(fd_tmp_file_map.find(fd) == fd_tmp_file_map.end()){
         cout<<"ERR: cant find fd= "<<fd<<" inside map"<<endl;
       }
       string temp_file = fd_tmp_file_map[fd];
-      string cache_file = getCachePath() + path;
-      cout<<"Renaming "<<temp_file<<" to "<<cache_file<<endl;
-      rename(temp_file.c_str(), cache_file.c_str());
+      //TODO: remove the df from fd_tmp_file_map
+      string consistent_tmp_file = temp_file + ".consistent";
+      cout<<"Renaming "<<temp_file<<" to "<<consistent_tmp_file<<endl;
+  
+      rename(temp_file.c_str(), consistent_tmp_file.c_str());
+      return consistent_tmp_file;
+  }
+  
+  void SaveConsistentTempFileToCache(string consistent_tmp_path, string path){
+      string cache_file_path =  path;
+      cout<<"Renaming "<<consistent_tmp_path<<" to "<<cache_file_path<<endl;
+
+      rename(consistent_tmp_path.c_str(), cache_file_path.c_str());
+  
   }
 
   void ReadTempFileIntoMemory(string path, CloseRequest &request, struct fuse_file_info *fi){
@@ -508,7 +595,7 @@ class AFSClient {
   }
 
   int Create(string path, struct fuse_file_info *fi, mode_t mode) {
-    if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) {
+    if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
       //create a new file inside cache directory
 	    //int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, mode);
 	    int fd = open((getCachePath() + string(path)).c_str(), 34881 | fi->flags, 0644);
@@ -519,8 +606,7 @@ class AFSClient {
 	    }
 	    close(fd);
     }
-      // create a temp file to work upon by the client
-    fi->fh = createTemporaryFile(path, fi, mode);
+    
     CreateRequest request;
     request.set_path(path);
     request.set_mode(mode);
@@ -698,4 +784,5 @@ class AFSClient {
  private:
   std::unique_ptr<AFS::Stub> stub_;
   unordered_map<int, string> fd_tmp_file_map;
+  unordered_set<int> dirty_temp_fd;
 };
