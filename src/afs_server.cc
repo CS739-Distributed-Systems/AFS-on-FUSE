@@ -24,7 +24,7 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
-  const char *serverPath = "/home/hemalkumar/hemal/server";
+  const char *serverPath = "/users/akshay95/server_space";
   
 
   string generateTempPath(string path){

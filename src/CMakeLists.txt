@@ -46,6 +46,9 @@ add_custom_command(
 # Include generated *.pb.h files
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        set(CXX_FILESYSTEM_LIBRARIES "stdc++fs")
+endif()
 # afs_grpc_proto
 add_library(afs_grpc_proto
   ${afs_grpc_srcs}
@@ -62,7 +65,8 @@ add_library(afs_client_lib
   "afs_client.cc"
 )
 target_link_libraries(afs_client_lib
-  afs_grpc_proto
+  afs_grpc_proto 
+  ${CXX_FILESYSTEM_LIBRARIES}
 )
 
 foreach(_target
@@ -72,6 +76,7 @@ foreach(_target
     afs_grpc_proto
     ${_REFLECTION}
     ${_GRPC_GRPCPP}
+    ${CXX_FILESYSTEM_LIBRARIES}
     ${_PROTOBUF_LIBPROTOBUF})
 endforeach()
 

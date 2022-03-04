@@ -50,7 +50,7 @@ static void *xmp_init(struct fuse_conn_info *conn,
 	cfg->entry_timeout = 0;
 	cfg->attr_timeout = 0;
 	cfg->negative_timeout = 0;
-
+        afsClient->init();
 	return NULL;
 }
 
