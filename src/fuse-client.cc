@@ -83,11 +83,11 @@ static int xmp_mkdir(const char *path, mode_t mode) {
     cout<<"======"<<__func__<<","<<path<<endl; 
     int res =  afsClient->MakeDir(path, mode);
     if(res == 0){
-      int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
-      if(local_res !=0){
+      //int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
+      //if(local_res !=0){
         //TODO what to do if server pass but local dir fails
-        cout<<"ERR: client local dir creation failed"<<endl;
-      }
+      //  cout<<"ERR: client local dir creation failed"<<endl;
+     // }
     } else {
       cout<<"ERR: server mkddir failed "<<endl;
     }
@@ -100,12 +100,12 @@ static int xmp_rmdir(const char *path)
     cout<<"======"<<__func__<<","<<path<<endl; 
     int res = afsClient->DeleteDir(path);
     if(res == 0){
-      cout<<"rmdir success on server"<<endl;
-      int local_res = rmdir((getCachePath() + string(path)).c_str());
-      if(local_res !=0){
+    //  cout<<"rmdir success on server"<<endl;
+    //  int local_res = rmdir((getCachePath() + string(path)).c_str());
+    //  if(local_res !=0){
         //TODO what to do if server pass but local dir fails
-        cout<<"ERR: client local dir creation failed"<<endl;
-      }
+    //    cout<<"ERR: client local dir creation failed"<<endl;
+    //  }
     } else {
       cout<<"ERR: server dir failed "<<endl;
     }
@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:50053";
+	string target_str = "localhost:51053";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
