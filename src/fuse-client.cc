@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 	int i,new_argc;
 	char *new_argv[MAX_ARGS];
 
-	string target_str = "localhost:51053";
+	string target_str = "localhost:50054";
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 

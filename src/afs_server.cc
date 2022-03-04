@@ -329,7 +329,7 @@ class AFSServiceImpl final : public AFS::Service {
 };
 
 void RunServer() {
-  std::string server_address("0.0.0.0:51053");
+  std::string server_address("0.0.0.0:50054");
   AFSServiceImpl service;
 
   grpc::EnableDefaultHealthCheckService(true);
