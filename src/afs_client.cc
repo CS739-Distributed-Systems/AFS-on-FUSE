@@ -110,13 +110,13 @@ class AFSClient {
             } while(res!=0 && numberOfRetries<MAX_RETRIES);
             
             if(res == -1){
-             cout<<"ERR: flushing to server failed"<<endl;
+              cout<<"ERR: flushing to server failed"<<endl;
+            } else {
+              // rename the .consistent file to original name
+              SaveConsistentTempFileToCache(absolute_path, orig_path);
             }
-
-            // rename the .consistent file to original name
-            SaveConsistentTempFileToCache(absolute_path, orig_path);
         }
-    } 
+    }
 
     std::cout<<"Done: Garbage Collector and Crash Recovery System"<<endl;
 
@@ -163,7 +163,7 @@ class AFSClient {
       cout << "START:" << __func__<< endl;
     #endif
     MakeDirReply reply;
-    reply.set_error(-1);
+    reply.set_error(-1);   // if server is down, by default error is -1
     MakeDirRequest request;
     request.set_path(path);
     request.set_mode(mode);
@@ -266,6 +266,7 @@ class AFSClient {
     if(res == -1){
       cout<<"ERR: pwrite failed on cache file "<<(cache_path + path)<<endl;
       perror(strerror(errno));
+      close(fd);
       return errno;
     }
     close(fd);
@@ -284,24 +285,28 @@ class AFSClient {
 
     // check if file exists inside cache and set fh to fi
     if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
-      cout<<"File not in cache"<<endl;
+      #ifdef IS_DEBUG_ON
+        cout<<"File not in cache"<<endl;
+      #endif
       fetchFileAndUpdateCache(path, fi);   //TODO ERR: shouldnt it be path ?????
     } else {
-      cout<<"file present in cache"<<endl;
+      #ifdef IS_DEBUG_ON
+        cout<<"file present in cache"<<endl;
+      #endif
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
-      int statRes = stat(path_in_cache.c_str(), &result); 
+      int statRes = stat(path_in_cache.c_str(), &result);
+      int cache_mod_time = -1;
       if(statRes!=0)
         cout<<"ERR: stat failed"<<statRes<<"path "<<path<<endl;
-      else {
-        auto cache_mod_time = result.st_mtime;
-        auto server_mod_time = getLastModTimeFromServer(path);
-        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
-          #ifdef IS_DEBUG_ON
+      else 
+        cache_mod_time = result.st_mtime;
+      auto server_mod_time = getLastModTimeFromServer(path);
+      if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+          //#ifdef IS_DEBUG_ON
             cout<<"Cache Invalidated/Stale, Fetching from Server"<<endl;
-          #endif
+          //#endif
           fetchFileAndUpdateCache(path, fi);
-        }
       }
     }
     // assuming that until this point the file exists in the client FS cache
@@ -331,11 +336,14 @@ class AFSClient {
     #endif
     
     int dest_file_fd;
-    if(mode == -1)
-	    dest_file_fd  = open(tmp_file_name.c_str(), fi->flags | O_CREAT , 0644);
-    else
-	    dest_file_fd = open(tmp_file_name.c_str(), fi -> flags, mode);
-    
+    if(mode == -1) {
+      cout << "***** called inside -1" << endl;
+      dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT , 0644);
+    } else {
+      cout << "***** called outside -1" << endl;
+	    dest_file_fd = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, mode);
+    }
+	    
     if(source_file_fd == -1 || dest_file_fd == -1){
       cout<<"ERR: file open failed for cacheFile/temporaryFile "<<__func__<<endl;
       cout<<source_file_fd<<", "<<dest_file_fd<<endl;
@@ -373,8 +381,8 @@ class AFSClient {
 
     dest_file_fd  = open(tmp_file_name.c_str(), fi->flags, 0644);
     if (dest_file_fd == -1){
-      cout << "ERR: open of file failed" <<tmp_file_name << endl;
-      perror(strerror(errno));
+     cout << "ERR: open of file failed" <<tmp_file_name << endl;
+     perror(strerror(errno));
     }
 
     #ifdef IS_DEBUG_ON
@@ -426,22 +434,23 @@ class AFSClient {
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
       int statRes = stat(path_in_cache.c_str(), &result); 
+      int cache_mod_time = -1;
       if(statRes!=0)
         cout<<"ERR: stat failed"<<statRes<<"path "<<path<<endl;
-      else {
-        auto cache_mod_time = result.st_mtime;
-        auto server_mod_time = getLastModTimeFromServer(path);
-        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
-          
-          #ifdef IS_DEBUG_ON
-            cout<<"Cache Invalidate/Stale, fetching from server"<<endl;
-          #endif
-          
-          do {
-            res = fetchFileAndUpdateCache_stream(path, fi);
-            numberOfRetries++;
-          } while(res!=0 && numberOfRetries<MAX_RETRIES);
-        }
+      else 
+        cache_mod_time = result.st_mtime;
+
+      auto server_mod_time = getLastModTimeFromServer(path);
+      if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+        
+        // #ifdef IS_DEBUG_ON
+          cout<<"Cache Invalidate/Stale, fetching from server"<<endl;
+        // #endif
+        
+        do {
+          res = fetchFileAndUpdateCache_stream(path, fi);
+          numberOfRetries++;
+        } while(res!=0 && numberOfRetries<MAX_RETRIES);
       }
     }
 

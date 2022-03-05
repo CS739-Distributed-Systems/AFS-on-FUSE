@@ -218,6 +218,7 @@ class AFSServiceImpl final : public AFS::Service {
       reply->set_error(errno);
       perror(strerror(errno));
       close(fd);
+      free(buf);
       
       #ifdef IS_DEBUG_ON
 	  	  cout << "END:" << __func__ << endl;
@@ -275,6 +276,8 @@ class AFSServiceImpl final : public AFS::Service {
         cerr << "server read error while reading op - err:" << errno << endl;
         reply.set_error(errno);
         writer->Write(reply);
+        close(fd);
+        free(buf);
         return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
 
@@ -325,7 +328,6 @@ class AFSServiceImpl final : public AFS::Service {
       #ifdef IS_DEBUG_ON
 	  	  cout << "END:" << __func__ << endl;
       #endif
-
       return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     } else {
       close(fd);
@@ -428,6 +430,7 @@ class AFSServiceImpl final : public AFS::Service {
       if (res == -1) {
         cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
         reply->set_error(-1);
+        close(fd);
         return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
     }
@@ -479,6 +482,7 @@ class AFSServiceImpl final : public AFS::Service {
     if(res == -1){
       cout<<"ERR: pwrite local failed in "<<__func__<<endl;
       perror(strerror(errno));
+      close(fd);
       return errno;
     }
     fsync(fd);
