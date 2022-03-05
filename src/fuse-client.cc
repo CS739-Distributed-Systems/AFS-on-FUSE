@@ -30,6 +30,9 @@
 
 #include "afs_client.cc"
 
+// #define CRASH_WRITE
+// #define CRASH_READ
+
 static int fill_dir_plus = 0;
 
 static AFSClient *afsClient;
@@ -251,6 +254,10 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	#endif
 
 	int res = pread(fi->fh, buf, size, offset);
+
+	#ifdef CRASH_READ
+		afsClient->killMe("crashing after read");
+	#endif
     
 	if (res == -1){
       cout << "ERR: pread failed" << endl;
@@ -276,6 +283,10 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 	afsClient->Write(fi->fh);
 
 	int res = pwrite(fi->fh, buf, size, offset);
+
+	#ifdef CRASH_WRITE
+		afsClient->killMe("crashing after write");
+	#endif
     
 	if (res == -1){
       cout << "ERR: pwrite failed" << endl;

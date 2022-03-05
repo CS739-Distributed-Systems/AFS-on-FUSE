@@ -30,7 +30,7 @@ class AFSServiceImpl final : public AFS::Service {
   
 
   string generateTempPath(string path){
-    return path + ".tmp";
+    return path + ".tmp" + to_string(rand() % 101743);
   }
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
@@ -406,10 +406,13 @@ class AFSServiceImpl final : public AFS::Service {
     int fd, res;
     bool firstReq = true;
 
+    string path, tempPath;
+
     while (reader->Read(&request)) {
       if (firstReq) {
-        string path = serverPath + string(request.path());
-        fd = open(path.c_str(), O_WRONLY);
+        path = serverPath + string(request.path());
+        tempPath = generateTempPath(path);
+        fd = open(tempPath.c_str(), O_RDWR | O_CREAT, 0644);
 
         if(fd == -1){
           cerr << "server tried to open file:" << path << endl;
@@ -431,6 +434,9 @@ class AFSServiceImpl final : public AFS::Service {
 
     fsync(fd);
     close(fd);
+
+    SaveTempFileToCache(tempPath, path);  
+
     reply->set_error(0);
 
     #ifdef IS_DEBUG_ON
