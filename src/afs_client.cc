@@ -871,12 +871,12 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->DeleteFile(&context, request, &reply);
-    } while(reply.error()!=0 || retryRequired(status, retry_interval, ++numberOfRetries));
-
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    
     #ifdef IS_DEBUG_ON
       cout << "END:" << __func__<< endl;
     #endif
-
+    
     return reply.error();
   }
 
