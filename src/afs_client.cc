@@ -37,7 +37,7 @@ using namespace std;
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
 #define TIME_LIMIT 3
-#define IS_DEBUG_ON
+// #define IS_DEBUG_ON
 
 // static string cache_path = "/users/akshay95/cache_dir";
 static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
