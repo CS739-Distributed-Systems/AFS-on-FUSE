@@ -9,8 +9,8 @@
 #include "afs.grpc.pb.h"
 #include <dirent.h>
 
-#define BUF_SIZE 1
-#define IS_DEBUG_ON
+#define BUF_SIZE 4096
+//#define IS_DEBUG_ON
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -25,8 +25,10 @@ using namespace std;
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
+//static string cache_path = "/home/hemalkumar/kalpit/cache";
+const char *serverPath = "/home/hemalkumar/kalpit/server";
   // const char *serverPath = "/users/akshay95/server_space";
-  const char *serverPath = "/home/hemalkumar/hemal/server";
+//  const char *serverPath = "/home/hemalkumar/hemal/server";
   
 
   string generateTempPath(string path){
@@ -414,7 +416,7 @@ class AFSServiceImpl final : public AFS::Service {
         if(fd == -1){
           cerr << "server tried to open file:" << path << endl;
           cerr <<"server close - local failed: with err - " << strerror(errno) << endl;
-          reply->set_error(-1);
+          reply->set_error(-errno);
           return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
         }
 
@@ -424,7 +426,7 @@ class AFSServiceImpl final : public AFS::Service {
       res = write(fd, request.buffer().c_str(), request.size());
       if (res == -1) {
         cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
-        reply->set_error(-1);
+        reply->set_error(-errno);
         return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
     }

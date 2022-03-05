@@ -33,14 +33,16 @@ using grpc::ClientWriter;
 using namespace afs;
 using namespace std;
 
-#define BUF_SIZE 1
+#define BUF_SIZE 4096
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
-#define TIME_LIMIT 3
-// #define IS_DEBUG_ON
+#define TIME_LIMIT 120
+//#define IS_DEBUG_ON
 
 // static string cache_path = "/users/akshay95/cache_dir";
-static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
+static string cache_path = "/home/hemalkumar/kalpit/cache";
+
+//static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 static std::string consistent_ext(".consistent");
 static std::string dirty_file_ext(".tmp");
 
@@ -623,7 +625,7 @@ class AFSClient {
       request.set_size(bytesRead);
 
       if (!writer->Write(request)) {
-        cerr << "stream broke:" << errno << endl;
+        cerr << "stream broke:" << reply.error() << endl;
         return -1;
       }
 
