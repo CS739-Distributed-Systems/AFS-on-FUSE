@@ -85,7 +85,13 @@ class AFSClient {
 	          string cache_relative_path = orig_path.substr(orig_path.find(cache_path)+cache_path.size());
 	  
 	          // send the file to server
-            int res = flushFileToServer(absolute_path.c_str(), cache_relative_path);
+            int res;
+            int numberOfRetries=0;
+            do{
+              res = flushFileToServer(absolute_path.c_str(), cache_relative_path);
+              numberOfRetries++;
+            } while(res!=0 && numberOfRetries<MAX_RETRIES);
+            
             if(res == -1){
              cout<<"ERR: flushing to server failed"<<endl;
             }
