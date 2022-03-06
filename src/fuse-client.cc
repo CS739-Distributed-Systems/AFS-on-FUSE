@@ -325,6 +325,14 @@ static int xmp_utimens(const char *path, const struct timespec ts[2],
     //return afsClient->Utimes(path, fi, mode);
 }
 
+static int xmp_fsync(const char *path, int isdatasync, struct fuse_file_info *fi){
+	if(isdatasync == 0){ 
+		return fsync(fi->fh);
+	} else {
+		return fdatasync(fi->fh);
+	}
+}
+
 static struct client_ops: fuse_operations {
 	client_ops() {
 		init = xmp_init;
@@ -340,6 +348,7 @@ static struct client_ops: fuse_operations {
 		read	= xmp_read;
 		write 	= xmp_write;
 		utimens = xmp_utimens;
+		fsync   = xmp_fsync;
 	}
 } xmp_oper;
 
