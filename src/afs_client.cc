@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iostream>
 #include <experimental/filesystem>
+#include <signal.h>
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
@@ -37,6 +38,16 @@ using namespace std;
 #define RETRY_INTERVAL 100
 #define MAX_RETRIES 5
 #define TIME_LIMIT 3
+
+
+// #define CRASH_OPEN_BEFORE_TEMP_FILE_CREATION
+// #define CRASH_OPEN_AFTER_TEMP_FILE_CREATION
+
+// #define CRASH_CLOSE_BEFORE_CONSISTENT_TEMP_CREATION
+// #define CRASH_CLOSE_AFTER_CONSISTENT_TEMP_CREATION
+// #define CRASH_CLOSE_AFTER_FLUSH_TO_SERVER
+// #define CRASH_CLOSE_AFTER_SAVING_CONSISTENT_TO_CACHE
+
 // #define IS_DEBUG_ON
 
 // static string cache_path = "/users/akshay95/cache_dir";
@@ -63,6 +74,12 @@ class AFSClient {
         fd_tmp_file_map.clear();
         dirty_temp_fd.clear();      
       }
+
+  void killMe(string msg) {
+    cout << msg << endl;
+    kill(getpid(), SIGINT);
+    exit(-1);
+  }
 
   void init(){
     std::cout<<"Running Garbage Collector and Crash Recovery System"<<endl;
@@ -93,13 +110,13 @@ class AFSClient {
             } while(res!=0 && numberOfRetries<MAX_RETRIES);
             
             if(res == -1){
-             cout<<"ERR: flushing to server failed"<<endl;
+              cout<<"ERR: flushing to server failed"<<endl;
+            } else {
+              // rename the .consistent file to original name
+              SaveConsistentTempFileToCache(absolute_path, orig_path);
             }
-
-            // rename the .consistent file to original name
-            SaveConsistentTempFileToCache(absolute_path, orig_path);
         }
-    } 
+    }
 
     std::cout<<"Done: Garbage Collector and Crash Recovery System"<<endl;
 
@@ -146,7 +163,7 @@ class AFSClient {
       cout << "START:" << __func__<< endl;
     #endif
     MakeDirReply reply;
-    reply.set_error(-1);
+    reply.set_error(-1);   // if server is down, by default error is -1
     MakeDirRequest request;
     request.set_path(path);
     request.set_mode(mode);
@@ -249,6 +266,7 @@ class AFSClient {
     if(res == -1){
       cout<<"ERR: pwrite failed on cache file "<<(cache_path + path)<<endl;
       perror(strerror(errno));
+      close(fd);
       return errno;
     }
     close(fd);
@@ -267,24 +285,28 @@ class AFSClient {
 
     // check if file exists inside cache and set fh to fi
     if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
-      cout<<"File not in cache"<<endl;
+      #ifdef IS_DEBUG_ON
+        cout<<"File not in cache"<<endl;
+      #endif
       fetchFileAndUpdateCache(path, fi);   //TODO ERR: shouldnt it be path ?????
     } else {
-      cout<<"file present in cache"<<endl;
+      #ifdef IS_DEBUG_ON
+        cout<<"file present in cache"<<endl;
+      #endif
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
-      int statRes = stat(path_in_cache.c_str(), &result); 
+      int statRes = stat(path_in_cache.c_str(), &result);
+      int cache_mod_time = -1;
       if(statRes!=0)
         cout<<"ERR: stat failed"<<statRes<<"path "<<path<<endl;
-      else {
-        auto cache_mod_time = result.st_mtime;
-        auto server_mod_time = getLastModTimeFromServer(path);
-        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
-          #ifdef IS_DEBUG_ON
+      else 
+        cache_mod_time = result.st_mtime;
+      auto server_mod_time = getLastModTimeFromServer(path);
+      if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+          //#ifdef IS_DEBUG_ON
             cout<<"Cache Invalidated/Stale, Fetching from Server"<<endl;
-          #endif
+          //#endif
           fetchFileAndUpdateCache(path, fi);
-        }
       }
     }
     // assuming that until this point the file exists in the client FS cache
@@ -314,11 +336,14 @@ class AFSClient {
     #endif
     
     int dest_file_fd;
-    if(mode == -1)
-	    dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, 0644);
-    else
-	    dest_file_fd = open(tmp_file_name.c_str(), fi -> flags, mode);
-    
+    if(mode == -1) {
+      cout << "***** called inside -1" << endl;
+      dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT , 0644);
+    } else {
+      cout << "***** called outside -1" << endl;
+	    dest_file_fd = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, mode);
+    }
+	    
     if(source_file_fd == -1 || dest_file_fd == -1){
       cout<<"ERR: file open failed for cacheFile/temporaryFile "<<__func__<<endl;
       cout<<source_file_fd<<", "<<dest_file_fd<<endl;
@@ -354,10 +379,10 @@ class AFSClient {
     close(source_file_fd);
     close(dest_file_fd);
 
-    dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR, 0644);
+    dest_file_fd  = open(tmp_file_name.c_str(), fi->flags, 0644);
     if (dest_file_fd == -1){
-      cout << "ERR: open of file failed" <<tmp_file_name << endl;
-      perror(strerror(errno));
+     cout << "ERR: open of file failed" <<tmp_file_name << endl;
+     perror(strerror(errno));
     }
 
     #ifdef IS_DEBUG_ON
@@ -409,26 +434,35 @@ class AFSClient {
       struct stat result;
       std::string path_in_cache = getCachePath() + path;
       int statRes = stat(path_in_cache.c_str(), &result); 
+      int cache_mod_time = -1;
       if(statRes!=0)
         cout<<"ERR: stat failed"<<statRes<<"path "<<path<<endl;
-      else {
-        auto cache_mod_time = result.st_mtime;
-        auto server_mod_time = getLastModTimeFromServer(path);
-        if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
-          
-          #ifdef IS_DEBUG_ON
-            cout<<"Cache Invalidate/Stale, fetching from server"<<endl;
-          #endif
-          
-          do {
-            res = fetchFileAndUpdateCache_stream(path, fi);
-            numberOfRetries++;
-          } while(res!=0 && numberOfRetries<MAX_RETRIES);
-        }
+      else 
+        cache_mod_time = result.st_mtime;
+
+      auto server_mod_time = getLastModTimeFromServer(path);
+      if (server_mod_time!=-1 && server_mod_time > cache_mod_time){
+        
+        // #ifdef IS_DEBUG_ON
+          cout<<"Cache Invalidate/Stale, fetching from server"<<endl;
+        // #endif
+        
+        do {
+          res = fetchFileAndUpdateCache_stream(path, fi);
+          numberOfRetries++;
+        } while(res!=0 && numberOfRetries<MAX_RETRIES);
       }
     }
 
+    #ifdef CRASH_OPEN_BEFORE_TEMP_FILE_CREATION
+        killMe("crashing before temp file creation");
+    #endif
+
     fi->fh = createTemporaryFile(path, fi);
+
+    #ifdef CRASH_OPEN_AFTER_TEMP_FILE_CREATION
+        killMe("crashing after temp file creation");
+    #endif
 
     #ifdef IS_DEBUG_ON
       cout << "END:" << __func__<< endl;
@@ -548,8 +582,16 @@ class AFSClient {
       cout << "START:" << __func__<< endl;
     #endif
 
+    #ifdef CRASH_CLOSE_BEFORE_CONSISTENT_TEMP_CREATION
+      killMe("crashing close op before consistent temp creation");
+    #endif
+
     // step - 1: save temp file to consistent tmp file to indicate non-dirty local cache
     string consistent_tmp_path = SaveTempFileToConsistentTemp(fi->fh);
+
+    #ifdef CRASH_CLOSE_AFTER_CONSISTENT_TEMP_CREATION
+      killMe("crashing close op after consistent temp creation");
+    #endif
     
     // Step - 2 If there are no changes to the file, skip sending it to server
     if (dirty_temp_fd.find(fi->fh) == dirty_temp_fd.end()) {
@@ -570,14 +612,27 @@ class AFSClient {
     
     dirty_temp_fd.erase(fi->fh);
     
+
+    #ifdef CRASH_CLOSE_BEFORE_SER
+      killMe("crashing close op before consistent temp creation");
+    #endif
     // step - 3: flush consistent tmp file to server
     int res = flushFileToServer(consistent_tmp_path.c_str(), path);
+
+    #ifdef CRASH_CLOSE_AFTER_FLUSH_TO_SERVER
+      killMe("crashing close after file is flushed to server");
+    #endif
+
     if(res == -1){
       cout<<"ERR: flushing to server failed"<<endl;
     }
     
     // step 4: Save the written file to cache file as well
     SaveConsistentTempFileToCache(consistent_tmp_path, getCachePath() + path);
+
+    #ifdef CRASH_CLOSE_AFTER_SAVING_CONSISTENT_TO_CACHE
+      killMe("crashing close after saving consistent file to cache");
+    #endif
 
 
     // TODO: check status and retry operation if required

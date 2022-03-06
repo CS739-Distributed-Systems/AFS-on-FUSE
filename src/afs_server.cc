@@ -30,7 +30,7 @@ class AFSServiceImpl final : public AFS::Service {
   
 
   string generateTempPath(string path){
-    return path + ".tmp";
+    return path + ".tmp" + to_string(rand() % 101743);
   }
 
   Status MakeDir(ServerContext* context, const MakeDirRequest* request,
@@ -218,6 +218,7 @@ class AFSServiceImpl final : public AFS::Service {
       reply->set_error(errno);
       perror(strerror(errno));
       close(fd);
+      free(buf);
       
       #ifdef IS_DEBUG_ON
 	  	  cout << "END:" << __func__ << endl;
@@ -275,6 +276,8 @@ class AFSServiceImpl final : public AFS::Service {
         cerr << "server read error while reading op - err:" << errno << endl;
         reply.set_error(errno);
         writer->Write(reply);
+        close(fd);
+        free(buf);
         return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
 
@@ -325,7 +328,6 @@ class AFSServiceImpl final : public AFS::Service {
       #ifdef IS_DEBUG_ON
 	  	  cout << "END:" << __func__ << endl;
       #endif
-
       return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
     } else {
       close(fd);
@@ -406,10 +408,13 @@ class AFSServiceImpl final : public AFS::Service {
     int fd, res;
     bool firstReq = true;
 
+    string path, tempPath;
+
     while (reader->Read(&request)) {
       if (firstReq) {
-        string path = serverPath + string(request.path());
-        fd = open(path.c_str(), O_WRONLY);
+        path = serverPath + string(request.path());
+        tempPath = generateTempPath(path);
+        fd = open(tempPath.c_str(), O_RDWR | O_CREAT, 0644);
 
         if(fd == -1){
           cerr << "server tried to open file:" << path << endl;
@@ -425,12 +430,16 @@ class AFSServiceImpl final : public AFS::Service {
       if (res == -1) {
         cerr <<"server close - local write failed: with err - " << strerror(errno) << endl;
         reply->set_error(-1);
+        close(fd);
         return grpc::Status(grpc::StatusCode::NOT_FOUND, "custom error msg");
       }
     }
 
     fsync(fd);
     close(fd);
+
+    SaveTempFileToCache(tempPath, path);  
+
     reply->set_error(0);
 
     #ifdef IS_DEBUG_ON
@@ -473,6 +482,7 @@ class AFSServiceImpl final : public AFS::Service {
     if(res == -1){
       cout<<"ERR: pwrite local failed in "<<__func__<<endl;
       perror(strerror(errno));
+      close(fd);
       return errno;
     }
     fsync(fd);
