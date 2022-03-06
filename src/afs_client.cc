@@ -40,13 +40,26 @@ using namespace std;
 #define TIME_LIMIT 3
 
 
+// case-1
 // #define CRASH_OPEN_BEFORE_TEMP_FILE_CREATION
+// case-2
 // #define CRASH_OPEN_AFTER_TEMP_FILE_CREATION
 
+// case-3
 // #define CRASH_CLOSE_BEFORE_CONSISTENT_TEMP_CREATION
+// case-4
 // #define CRASH_CLOSE_AFTER_CONSISTENT_TEMP_CREATION
+// case-5
 // #define CRASH_CLOSE_AFTER_FLUSH_TO_SERVER
+// case-6
 // #define CRASH_CLOSE_AFTER_SAVING_CONSISTENT_TO_CACHE
+
+// case - 7
+// #define CRASH_WRITE
+
+// case - 8
+//#define CRASH_READ
+
 
 // #define IS_DEBUG_ON
 
@@ -94,7 +107,7 @@ class AFSClient {
              perror(strerror(errno));
 	         }
          } else if (p.path().extension() == consistent_ext){
-
+            cout<<"Recovering consistent file: "<<p.path().string()<<endl;
             // fetch the original path after stripping .tmpXXX.consistent
 	          string absolute_path = p.path().string();
 	          string orig_path = absolute_path.substr(0, absolute_path.find_last_of("."));

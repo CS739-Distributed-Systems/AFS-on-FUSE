@@ -30,9 +30,6 @@
 
 #include "afs_client.cc"
 
-// #define CRASH_WRITE
-// #define CRASH_READ
-
 static int fill_dir_plus = 0;
 
 static AFSClient *afsClient;
