@@ -10,6 +10,8 @@ def makefiles(f):
     buff=""
     for i in range(2048):
         buff=buff+"a"
+#    print(buff)
+#    print(len(buff))
     count=1
     for i in range(1,todo):
         if i == todo-1:
@@ -21,6 +23,7 @@ def makefiles(f):
         t2=datetime.datetime.now()
         for j in range(count):
             temp.write(buff)
+#            print("hua")
         t3=datetime.datetime.now()
         temp.close()
         t4=datetime.datetime.now()
@@ -32,6 +35,7 @@ def makefiles(f):
         print(str(x)+" bytes,time to open,"+str(diff1)+",time to write,"+str(diff2)+",time to close,"+str(diff3)+",total time,"+str(diff4))
         f.write(str(x)+" bytes,time to open,"+str(diff1)+",time to write,"+str(diff2)+",time to close,"+str(diff3)+",total time,"+str(diff4)+"\n")
     os.system('rm -rf /home/hemalkumar/kalpit/cache/*')
+#    time.sleep(50)
   #  os.system('rm -rf /home/hemalkumar/kalpit/server/*')
 
 
@@ -39,6 +43,8 @@ def read(f):
     x=1024
     name='a'
     print("start read")
+#    temp = open(mountdir+name,"r+")
+#    temp.close()
     for i in range(1,todo):
         if i==todo-1:
             break
@@ -66,8 +72,8 @@ def read(f):
         arr.sort()
         print(str(x)+" bytes,First time,"+str(diff1)+",Avg time,"+str(avgt)+",Median time,"+str(arr[5]))
         f.write(str(x)+" bytes,First time,"+str(diff1)+",Avg time,"+str(avgt)+",Median time,"+str(arr[5])+"\n")
-    os.system('rm -rf /home/hemalkumar/kalpit/cache/*')
-
+#    os.system('rm -rf /home/hemalkumar/kalpit/cache/*')
+    
 def rununittests():
     os.system("mkdir "+mountdir+"abc")
     stream=os.popen("ls "+mountdir)
@@ -110,6 +116,6 @@ if __name__ == "__main__":
     f = open("readspeeds.csv","w+")
     read(f)
     f.close()
-    lastwriter()
-    os.system('rm -rf /home/hemalkumar/kalpit/cache/*')
-    os.system('rm -rf /home/hemalkumar/kalpit/server/*')
+#    lastwriter()
+#    os.system('rm -rf /home/hemalkumar/kalpit/cache/*')
+#    os.system('rm -rf /home/hemalkumar/kalpit/server/*')
