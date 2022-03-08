@@ -63,6 +63,9 @@ using namespace std;
 
 // #define IS_DEBUG_ON
 
+
+
+
 // static string cache_path = "/users/akshay95/cache_dir";
 static string cache_path = "/home/hemalkumar/hemal/client_cache_dir";
 static std::string consistent_ext(".consistent");
@@ -150,10 +153,10 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->GetAttr(&context, request , &reply);
-    } while (reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while (reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
     if(reply.error() != 0){
-      cout<<"ERR: GetAttr failed from server"<<reply.error()<<endl;
+      // cout<<"ERR: GetAttr failed from server"<< reply.error() <<endl;
       return -reply.error();
     }
 
@@ -187,7 +190,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->MakeDir(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
     if(reply.error() == 0){
       int local_res = mkdir((getCachePath() + string(path)).c_str(), mode);
@@ -218,7 +221,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->DeleteDir(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
     if(reply.error() == 0){
       #ifdef IS_DEBUG_ON
@@ -350,10 +353,8 @@ class AFSClient {
     
     int dest_file_fd;
     if(mode == -1) {
-      cout << "***** called inside -1" << endl;
       dest_file_fd  = open(tmp_file_name.c_str(), O_RDWR | O_CREAT , 0644);
     } else {
-      cout << "***** called outside -1" << endl;
 	    dest_file_fd = open(tmp_file_name.c_str(), O_RDWR | O_CREAT, mode);
     }
 	    
@@ -392,7 +393,7 @@ class AFSClient {
     close(source_file_fd);
     close(dest_file_fd);
 
-    dest_file_fd  = open(tmp_file_name.c_str(), fi->flags, 0644);
+    dest_file_fd  = open(tmp_file_name.c_str(), fi->flags & (~O_CREAT), 0644);
     if (dest_file_fd == -1){
      cout << "ERR: open of file failed" <<tmp_file_name << endl;
      perror(strerror(errno));
@@ -429,7 +430,7 @@ class AFSClient {
     #endif
     // check if file exists inside cache and set fh to fi
     int numberOfRetries=0;
-    int res;
+    int res = -1;
     if(!checkIfFileExistsViaLocalLstat(getCachePath() + path)) { 
       #ifdef IS_DEBUG_ON
           cout<<"file not present in Cache"<<endl;
@@ -439,6 +440,11 @@ class AFSClient {
         res = fetchFileAndUpdateCache_stream(path, fi);
         numberOfRetries++;
       } while(res!=0 && numberOfRetries<MAX_RETRIES);
+
+      if (res == -1) {
+        cout << "1------error: returning -1" << endl;
+        return -1;
+      }
     } else {
       #ifdef IS_DEBUG_ON
           cout<<"File present in cache"<<endl;
@@ -459,11 +465,17 @@ class AFSClient {
         // #ifdef IS_DEBUG_ON
           cout<<"Cache Invalidate/Stale, fetching from server"<<endl;
         // #endif
-        
+        res = -1;
+
         do {
           res = fetchFileAndUpdateCache_stream(path, fi);
           numberOfRetries++;
         } while(res!=0 && numberOfRetries<MAX_RETRIES);
+
+        if (res == -1) {
+          cout << "2------error: returning -1" << endl;
+          return -1;
+        }
       }
     }
 
@@ -561,7 +573,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->Close(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
     
     // step 4: Save the written file to cache file as well
     SaveConsistentTempFileToCache(consistent_tmp_path, getCachePath() + path);
@@ -846,8 +858,8 @@ class AFSClient {
        
        int res = mkdir(dir.c_str(),mode);
        if(res != 0){
-         cout << "ERR: MirrorDirectory: makedir failed "<<dir<< endl;
-         perror(strerror(errno));
+         //cout << "ERR: MirrorDirectory: makedir failed "<<dir<< endl;
+         //perror(strerror(errno));
          return;
        }
        prefix = dir;
@@ -861,8 +873,8 @@ class AFSClient {
     
     int res = mkdir(dir.c_str(),mode);
     if(res != 0){
-      cout << "ERR: MirrorDirectory: makedir failed " << dir << endl;
-      perror(strerror(errno));
+      //cout << "ERR: MirrorDirectory: makedir failed " << dir << endl;
+      //perror(strerror(errno));
       return;
     }
 
@@ -902,7 +914,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->Create(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
     if(reply.error() == 0){
 	    mirrorDirectoryStructureInsideCache(getCachePath(), path, mode);
@@ -945,7 +957,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->DeleteFile(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
     
     #ifdef IS_DEBUG_ON
       cout << "END:" << __func__<< endl;
@@ -972,7 +984,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->GetAttr(&context, request , &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
     if(reply.error() != 0){
       return -1;
@@ -992,6 +1004,7 @@ class AFSClient {
       // open file locally in write mode. If this fails then don't contact the server
       // create a new file if it does not exist
       // We are fetching a new file from server anyway, should not be an issue
+      mirrorDirectoryStructureInsideCache(getCachePath(), path);
       int fd = open((getCachePath() + path).c_str(), O_WRONLY | O_CREAT | O_TRUNC);
       if(fd == -1){
         cout<<"Stream: open local failed"<<__func__<<endl;
@@ -1057,7 +1070,7 @@ class AFSClient {
       ClientContext context;
       setContextDeadline(context);
       status = stub_->Open(&context, request, &reply);
-    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries));
+    } while(reply.error()!=0 && retryRequired(status, retry_interval, ++numberOfRetries, __func__));
 
       // check if status is false
       //if(status != Status::OK){
@@ -1083,7 +1096,7 @@ class AFSClient {
     #endif
   }
 
-  bool retryRequired(const Status &status, int &retry_interval, int numberOfRetries) {
+  bool retryRequired(const Status &status, int &retry_interval, int numberOfRetries, string func_name) {
     #ifdef IS_DEBUG_ON
       cout << "START:" << __func__<< endl;
     #endif
@@ -1096,7 +1109,7 @@ class AFSClient {
       return false;
     }else {
       #ifdef IS_DEBUG_ON
-          cout<<"Retrying"<<endl;
+      cout<<"Server not responding for func: "<<func_name<<" retrying after: "<<retry_interval<<" ms"<<endl;
       #endif
       
       std::this_thread::sleep_for (std::chrono::milliseconds(retry_interval));

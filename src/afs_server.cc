@@ -8,9 +8,17 @@
 #include <grpcpp/health_check_service_interface.h>
 #include "afs.grpc.pb.h"
 #include <dirent.h>
+#include <signal.h>
+#include <experimental/filesystem>
+
 
 #define BUF_SIZE 1
 // #define IS_DEBUG_ON
+
+//case - 9
+//#define CRASH_CLOSE_BEFORE_PERSISTENCE
+//case - 10
+//#define CRASH_CLOSE_AFTER_PERSISTENCE
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -22,11 +30,19 @@ using grpc::ServerWriter;
 using namespace afs;
 using namespace std;
 
+ void killMe(string msg) {
+    cout << msg << endl;
+    kill(getpid(), SIGINT);
+    exit(-1);
+  }
+
+const char *serverPath = "/home/hemalkumar/hemal/server";
+
 // Logic and data behind the server's behavior.
 class AFSServiceImpl final : public AFS::Service {
 
   // const char *serverPath = "/users/akshay95/server_space";
-  const char *serverPath = "/home/hemalkumar/hemal/server";
+  
   
 
   string generateTempPath(string path){
@@ -77,7 +93,8 @@ class AFSServiceImpl final : public AFS::Service {
 
 		dp = opendir((serverPath + request->path()).c_str());
 		if (dp == NULL){
-			perror(strerror(errno));
+			cout<<"opendir dp null"<<endl;
+      perror(strerror(errno));
 			directory.set_error(errno);
       #ifdef IS_DEBUG_ON
 	  	  cout << "END:" << __func__ << endl;
@@ -147,7 +164,8 @@ class AFSServiceImpl final : public AFS::Service {
     res = lstat(path.c_str(), &st);
     if (res < 0)
     {
-      perror(strerror(errno));
+      //cout<<"lstat failed"<<endl;
+      //perror(strerror(errno));
       reply->set_error(errno);
       return Status::OK;
     }
@@ -176,7 +194,7 @@ class AFSServiceImpl final : public AFS::Service {
       #ifdef IS_DEBUG_ON
 	  	  printf("could not open file\n");
 	    #endif
-
+      cout<<"open failed "<<__func__<<endl;
       reply->set_error(errno);
       perror(strerror(errno));
       #ifdef IS_DEBUG_ON
@@ -191,7 +209,7 @@ class AFSServiceImpl final : public AFS::Service {
       #ifdef IS_DEBUG_ON
 	  	  printf("fstat failed\n");
 	    #endif
-      
+      cout<<"fstat failed"<<endl;
       reply->set_error(errno);
       perror(strerror(errno));
       close(fd);
@@ -322,6 +340,7 @@ class AFSServiceImpl final : public AFS::Service {
 	  #endif
     
     if (fd == -1) {
+      cout<<"create failed"<<endl;
       perror(strerror(errno));
   	  reply->set_error(errno);
       
@@ -438,7 +457,15 @@ class AFSServiceImpl final : public AFS::Service {
     fsync(fd);
     close(fd);
 
+    #ifdef CRASH_CLOSE_BEFORE_PERSISTENCE
+      killMe("Server crashing before Renaming tmp file");
+    #endif
+
     SaveTempFileToCache(tempPath, path);  
+
+    #ifdef CRASH_CLOSE_AFTER_PERSISTENCE
+      killMe("Server crashing After Renaming tmp file");
+    #endif
 
     reply->set_error(0);
 
@@ -518,7 +545,27 @@ void RunServer() {
   server->Wait();
 }
 
+void GarbageCollection(){
+    std::string dirty_file_ext(".tmp");
+    std::cout<<"Running Garbage Collector System"<<endl;
+
+    for (auto &p : std::experimental::filesystem::recursive_directory_iterator(string(serverPath)))
+    {
+         if(p.path().extension().string().rfind(dirty_file_ext) == 0){
+           cout<<"Deleting dirty tmp file: "<<p.path().string()<<endl;
+           int ret = unlink(p.path().string().c_str());
+           if(ret == -1){
+             cout<<"ERR: garbageCollector deletion of dirty tmp file failed"<<__func__<<endl;
+             perror(strerror(errno));
+	         }
+         }
+    }
+    std::cout<<"Running Garbage Collector System"<<endl;
+
+}
+
 int main(int argc, char** argv) {
+  GarbageCollection();
   RunServer();
 
   return 0;
