@@ -36,7 +36,7 @@ Graphs are given in `slides.pdf` and `report.pdf`
 Crash recovery protocol is given in both `slides.pdf` and `report.pdf`. Crash demos are hosted here: https://uwprod-my.sharepoint.com/:f:/g/personal/hrpatel5_wisc_edu/EtFDuGALu4JEqsQmdBvuflIBPq7L-0CY5VDWCFwVFMSa7g?e=55K7tJ
 
 
-# 3. Delivery
+## 3. Delivery
 ### 3.1 Presentation
 - Please see `slides.pdf`
 
