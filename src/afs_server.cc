@@ -10,7 +10,7 @@
 #include <dirent.h>
 
 #define BUF_SIZE 1
-#define IS_DEBUG_ON
+// #define IS_DEBUG_ON
 
 using grpc::Server;
 using grpc::ServerBuilder;
