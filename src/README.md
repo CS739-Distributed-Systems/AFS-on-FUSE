@@ -31,3 +31,9 @@ for example, instead of `make -j` use `make -j 4`
 
 ### Clean
 execute `make clean` from `cmake/build` directory.
+
+### Misc
+There are some flags that we have inserted in our code to test various crash scenarios and enable logs. There is also configurable buffer size for read/write/stream operations.
+
+- Client side config: https://github.com/hemal7735/CS739-p2/blob/main/src/afs_client.cc#L43-L64
+- Server side config: https://github.com/hemal7735/CS739-p2/blob/main/src/afs_client.cc#L43-L64
